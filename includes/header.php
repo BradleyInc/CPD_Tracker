@@ -11,7 +11,7 @@ if (session_status() === PHP_SESSION_NONE) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CPD Tracker - <?php echo $pageTitle ?? 'Professional Development'; ?></title>
     <link rel="stylesheet" href="css/style.css">
-	<link rel="stylesheet" href="css/admin.css">
+    <link rel="stylesheet" href="css/admin.css">
 </head>
 <body>
     <header class="header">
@@ -23,13 +23,21 @@ if (session_status() === PHP_SESSION_NONE) {
                 <?php if (isset($_SESSION['user_id'])): ?>
                 <nav class="user-menu">
                     <span>Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?>!</span>
-                    <a href="dashboard.php" class="btn btn-secondary">Dashboard</a>
+                    <a href="dashboard.php" class="btn btn-secondary">My CPD</a>
+                    
+                    <?php if (isset($_SESSION['user_role'])): ?>
+                        <?php if ($_SESSION['user_role'] === 'admin'): ?>
+                            <a href="admin_dashboard.php" class="btn btn-secondary">Admin Panel</a>
+                        <?php elseif ($_SESSION['user_role'] === 'manager'): ?>
+                            <a href="manager_dashboard.php" class="btn btn-secondary">Manager Dashboard</a>
+                        <?php elseif ($_SESSION['user_role'] === 'partner'): ?>
+                            <a href="partner_dashboard.php" class="btn btn-secondary">Partner Dashboard</a>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                    
                     <a href="logout.php" class="btn btn-secondary">Logout</a>
                 </nav>
                 <?php endif; ?>
-				<?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'admin'): ?>
-    <a href="admin_dashboard.php" class="btn btn-secondary">Admin Panel</a>
-<?php endif; ?>
             </div>
         </div>
     </header>

@@ -9,13 +9,16 @@ function isAdmin() {
 }
 
 /**
- * Get all users for admin view
+ * Get all users for admin view (excludes archived by default)
  */
-function getAllUsers($pdo) {
+function getAllUsers($pdo, $include_archived = false) {
+    $where_clause = $include_archived ? "" : "WHERE u.archived = 0";
+    
     $stmt = $pdo->prepare("
-        SELECT u.id, u.username, u.email, u.created_at, r.name as role_name 
+        SELECT u.id, u.username, u.email, u.created_at, u.archived, r.name as role_name 
         FROM users u 
         LEFT JOIN roles r ON u.role_id = r.id 
+        $where_clause
         ORDER BY u.created_at DESC
     ");
     $stmt->execute();
@@ -72,15 +75,16 @@ function renderAdminNav($current_page = '') {
  */
 function renderTeamNav($team_id, $current_page = '') {
     $team_id = intval($team_id);
-	?>
+    ?>
     <nav class="admin-nav">
         <a href="admin_dashboard.php">Dashboard</a>
         <a href="admin_manage_teams.php">Manage Teams</a>
         <a href="admin_edit_team.php?id=<?php echo $team_id; ?>" <?php echo $current_page === 'details' ? 'class="active"' : ''; ?>>Team Details</a>
         <a href="admin_team_members.php?id=<?php echo $team_id; ?>" <?php echo $current_page === 'members' ? 'class="active"' : ''; ?>>Team Members</a>
+        <a href="admin_team_leadership.php?id=<?php echo $team_id; ?>" <?php echo $current_page === 'leadership' ? 'class="active"' : ''; ?>>Team Leadership</a>
         <a href="admin_team_report.php?id=<?php echo $team_id; ?>" <?php echo $current_page === 'report' ? 'class="active"' : ''; ?>>Team Report</a>
         <a href="dashboard.php">Back to Main App</a>
     </nav>
-	<?php
+    <?php
 }
 ?>
