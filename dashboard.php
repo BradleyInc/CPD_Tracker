@@ -335,6 +335,12 @@ debugLog("Total hours: $total_hours");
 					<?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'admin'): ?>
 						<a href="admin_dashboard.php" class="btn btn-secondary">Admin Dashboard</a>
 					<?php endif; ?>
+					<?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'partner'): ?>
+						<a href="partner_dashboard.php" class="btn btn-secondary">Partner Dashboard</a>
+					<?php endif; ?>
+					<?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'manager'): ?>
+						<a href="manager_dashboard.php" class="btn btn-secondary">Manager Dashboard</a>
+					<?php endif; ?>
 					
 					<a href="logout.php" class="btn btn-secondary">Logout</a>
 				</nav>
