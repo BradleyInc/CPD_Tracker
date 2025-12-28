@@ -1,6 +1,6 @@
 <?php 
 require_once 'includes/database.php';
-require_once 'includes/auth.php';  // This line MUST be present
+require_once 'includes/auth.php';
 
 if (!isset($_SESSION)) {
     session_start();
@@ -26,7 +26,6 @@ if (isset($_SESSION['user_id'])) {
         
         <?php
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
-            // Sanitize input
             $username = trim(htmlspecialchars($_POST['username']));
             $password = $_POST['password'];
             
@@ -35,22 +34,26 @@ if (isset($_SESSION['user_id'])) {
             } else {
                 try {
                     // Use prepared statement to prevent SQL injection
-                    $stmt = $pdo->prepare("SELECT id, username, password_hash FROM users WHERE username = ?");
+                    $stmt = $pdo->prepare("SELECT id, username, password_hash, archived FROM users WHERE username = ?");
                     $stmt->execute([$username]);
                     $user = $stmt->fetch();
                     
                     if ($user && password_verify($password, $user['password_hash'])) {
-                        // Regenerate session ID to prevent session fixation
-                        session_regenerate_id(true);
-                        
-                        $_SESSION['user_id'] = $user['id'];
-						// After setting $_SESSION['user_id']
-						$_SESSION['user_role'] = getUserRole($pdo, $user['id']);
-                        $_SESSION['username'] = htmlspecialchars($user['username']);
-                        $_SESSION['login_time'] = time();
-                        
-                        header("Location: dashboard.php");
-                        exit();
+                        // Check if user is archived
+                        if ($user['archived'] == 1) {
+                            echo "<div class='alert alert-error'>This account has been archived. Please contact your administrator.</div>";
+                        } else {
+                            // Regenerate session ID to prevent session fixation
+                            session_regenerate_id(true);
+                            
+                            $_SESSION['user_id'] = $user['id'];
+                            $_SESSION['user_role'] = getUserRole($pdo, $user['id']);
+                            $_SESSION['username'] = htmlspecialchars($user['username']);
+                            $_SESSION['login_time'] = time();
+                            
+                            header("Location: dashboard.php");
+                            exit();
+                        }
                     } else {
                         echo "<div class='alert alert-error'>Invalid username or password</div>";
                     }

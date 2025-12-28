@@ -104,91 +104,6 @@ function parseICSDuration($duration) {
     return 0;
 }
 
-// Handle file upload
-$imported_events = [];
-$import_errors = [];
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import_ics'])) {
-    if (isset($_FILES['ics_file']) && $_FILES['ics_file']['error'] === UPLOAD_ERR_OK) {
-        $file = $_FILES['ics_file'];
-        
-        // Validate file type
-        $allowed_types = ['text/calendar', 'application/octet-stream', 'text/plain'];
-        $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        
-        if ($file_ext !== 'ics' || !in_array($file['type'], $allowed_types)) {
-            $import_errors[] = 'Please upload a valid .ics calendar file';
-        } elseif ($file['size'] > 10 * 1024 * 1024) {
-            $import_errors[] = 'File size must be less than 10MB';
-        } else {
-            // Parse the .ics file
-            $result = parseICSFile($file['tmp_name']);
-            
-            if (isset($result['error'])) {
-                $import_errors[] = $result['error'];
-            } else {
-                $imported_events = $result['events'];
-                
-                // Handle import confirmation
-                if (isset($_POST['confirm_import']) && isset($_POST['selected_events'])) {
-                    $imported_count = 0;
-                    $skipped_count = 0;
-                    
-                    foreach ($_POST['selected_events'] as $index) {
-                        if (isset($imported_events[$index])) {
-                            $event = $imported_events[$index];
-                            
-                            // Check if event already exists (by title and date)
-                            try {
-                                $stmt = $pdo->prepare("SELECT id FROM cpd_entries WHERE user_id = ? AND title = ? AND date_completed = ?");
-                                $stmt->execute([
-                                    $_SESSION['user_id'],
-                                    $event['summary'],
-                                    date('Y-m-d', strtotime($event['start']))
-                                ]);
-                                
-                                if (!$stmt->fetch()) {
-                                    // Insert as CPD entry
-                                    $stmt = $pdo->prepare("INSERT INTO cpd_entries (user_id, title, description, date_completed, hours, category, supporting_docs, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
-                                    
-                                    $category = determineCategory($event['summary'], $event['description']);
-                                    $hours = max(0.5, round($event['duration'], 1));
-                                    
-                                    $stmt->execute([
-                                        $_SESSION['user_id'],
-                                        $event['summary'],
-                                        $event['description'] . (!empty($event['location']) ? "\n\nLocation: " . $event['location'] : ''),
-                                        date('Y-m-d', strtotime($event['start'])),
-                                        $hours,
-                                        $category,
-                                        'imported.ics' // Mark as imported from .ics
-                                    ]);
-                                    
-                                    $imported_count++;
-                                } else {
-                                    $skipped_count++;
-                                }
-                            } catch (PDOException $e) {
-                                error_log("Import error: " . $e->getMessage());
-                                $import_errors[] = 'Database error importing event: ' . $event['summary'];
-                            }
-                        }
-                    }
-                    
-                    if ($imported_count > 0) {
-                        echo "<div class='alert alert-success'>Successfully imported $imported_count CPD entries. $skipped_count entries were skipped (already exist).</div>";
-                    } else if ($skipped_count > 0) {
-                        echo "<div class='alert alert-warning'>All $skipped_count entries were skipped (already exist).</div>";
-                    }
-                    $imported_events = []; // Clear after import
-                }
-            }
-        }
-    } else {
-        $import_errors[] = 'Please select an .ics file to upload';
-    }
-}
-
 // Helper function to determine category from event data
 function determineCategory($title, $description) {
     $title_lower = strtolower($title);
@@ -212,6 +127,104 @@ function determineCategory($title, $description) {
     
     return 'Other';
 }
+
+// Handle file upload
+$imported_events = [];
+$import_errors = [];
+
+// FIXED: Handle confirmation BEFORE file upload
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_import'])) {
+    // Retrieve events from session
+    if (isset($_SESSION['ics_import_events']) && isset($_POST['selected_events'])) {
+        $imported_events = $_SESSION['ics_import_events'];
+        $imported_count = 0;
+        $skipped_count = 0;
+        
+        foreach ($_POST['selected_events'] as $index) {
+            if (isset($imported_events[$index])) {
+                $event = $imported_events[$index];
+                
+                // Check if event already exists (by title and date)
+                try {
+                    $stmt = $pdo->prepare("SELECT id FROM cpd_entries WHERE user_id = ? AND title = ? AND date_completed = ?");
+                    $stmt->execute([
+                        $_SESSION['user_id'],
+                        $event['summary'],
+                        date('Y-m-d', strtotime($event['start']))
+                    ]);
+                    
+                    if (!$stmt->fetch()) {
+                        // Insert as CPD entry
+                        $stmt = $pdo->prepare("INSERT INTO cpd_entries (user_id, title, description, date_completed, hours, category, supporting_docs, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
+                        
+                        $category = determineCategory($event['summary'], $event['description']);
+                        $hours = max(0.5, round($event['duration'], 1));
+                        
+                        $stmt->execute([
+                            $_SESSION['user_id'],
+                            $event['summary'],
+                            $event['description'] . (!empty($event['location']) ? "\n\nLocation: " . $event['location'] : ''),
+                            date('Y-m-d', strtotime($event['start'])),
+                            $hours,
+                            $category,
+                            null  // No supporting docs for imported events
+                        ]);
+                        
+                        $imported_count++;
+                    } else {
+                        $skipped_count++;
+                    }
+                } catch (PDOException $e) {
+                    error_log("Import error: " . $e->getMessage());
+                    $import_errors[] = 'Database error importing event: ' . $event['summary'];
+                }
+            }
+        }
+        
+        // Clear session data after import
+        unset($_SESSION['ics_import_events']);
+        
+        if ($imported_count > 0) {
+            echo "<div class='alert alert-success'>Successfully imported $imported_count CPD entries. $skipped_count entries were skipped (already exist). <a href='dashboard.php'>View Dashboard</a></div>";
+        } else if ($skipped_count > 0) {
+            echo "<div class='alert alert-warning'>All $skipped_count entries were skipped (already exist).</div>";
+        }
+        
+        $imported_events = []; // Clear display
+    } else {
+        $import_errors[] = 'No events found to import. Please upload the file again.';
+    }
+}
+// Handle initial file upload
+elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import_ics'])) {
+    if (isset($_FILES['ics_file']) && $_FILES['ics_file']['error'] === UPLOAD_ERR_OK) {
+        $file = $_FILES['ics_file'];
+        
+        // Validate file type
+        $allowed_types = ['text/calendar', 'application/octet-stream', 'text/plain'];
+        $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        
+        if ($file_ext !== 'ics' || !in_array($file['type'], $allowed_types)) {
+            $import_errors[] = 'Please upload a valid .ics calendar file';
+        } elseif ($file['size'] > 10 * 1024 * 1024) {
+            $import_errors[] = 'File size must be less than 10MB';
+        } else {
+            // Parse the .ics file
+            $result = parseICSFile($file['tmp_name']);
+            
+            if (isset($result['error'])) {
+                $import_errors[] = $result['error'];
+            } else {
+                $imported_events = $result['events'];
+                // FIXED: Store events in session for next request
+                $_SESSION['ics_import_events'] = $imported_events;
+            }
+        }
+    } else {
+        $import_errors[] = 'Please select an .ics file to upload';
+    }
+}
+
 ?>
 
 <div class="container">
@@ -256,11 +269,9 @@ function determineCategory($title, $description) {
             <p>Select the events you want to import as CPD entries:</p>
             
             <form method="POST">
-                <input type="hidden" name="import_ics" value="1">
-                
                 <div style="margin-bottom: 1rem;">
                     <label>
-                        <input type="checkbox" id="selectAllEvents" onclick="toggleAllEvents(this)">
+                        <input type="checkbox" id="selectAllEvents" onclick="toggleAllEvents(this)" checked>
                         Select All Events
                     </label>
                 </div>
