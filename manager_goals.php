@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_from_template'
 }
 
 // Get manager's teams and goals
-$managed_teams = isManager() ? getManagerTeams($pdo, $_SESSION['user_id']) : getPartnerDepartments($pdo, $_SESSION['user_id']);
+$managed_teams = isManager() ? getManagerTeams($pdo, $_SESSION['user_id']) : getPartnerTeams($pdo, $_SESSION['user_id']);
 $all_goals = isManager() ? getManagerGoals($pdo, $_SESSION['user_id']) : getPartnerGoals($pdo, $_SESSION['user_id']);
 $overdue_goals = getOverdueGoals($pdo, $_SESSION['user_id']);
 $approaching_goals = getApproachingDeadlineGoals($pdo, 7, $_SESSION['user_id']);
