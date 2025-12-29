@@ -331,7 +331,7 @@ debugLog("Total hours: $total_hours");
                 <nav class="user-menu">
 					<span>Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?>!</span>
 					<a href="dashboard.php" class="btn btn-secondary">Dashboard</a>
-					
+					<a href="user_goals.php" class="btn btn-secondary">Goals</a>
 					<?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'admin'): ?>
 						<a href="admin_dashboard.php" class="btn btn-secondary">Admin Dashboard</a>
 					<?php endif; ?>
@@ -379,8 +379,8 @@ debugLog("Total hours: $total_hours");
                 <div class="form-group">
                     <label>Supporting Documentation:</label>
                     <div class="file-upload">
-                        <input type="file" name="supporting_doc" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.ics">
-                        <small>Max 10MB - PDF, JPEG, PNG, Word docs, or .ics calendar files</small>
+                        <input type="file" name="supporting_doc" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
+                        <small>Max 10MB - PDF, JPEG, PNG, or Word docs</small>
                     </div>
                 </div>
                 <button type="submit" name="add_entry" class="btn btn-block">Add CPD Entry</button>
