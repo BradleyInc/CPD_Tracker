@@ -318,11 +318,7 @@ function canUserAccessTeamData($pdo, $user_id, $team_id) {
 function renderManagerNav($team_id, $current_page = '') {
     ?>
     <nav class="admin-nav">
-        <a href="manager_dashboard.php">My Teams</a>
-        <a href="manager_team_view.php?id=<?php echo $team_id; ?>" <?php echo $current_page === 'overview' ? 'class="active"' : ''; ?>>Team Overview</a>
-        <a href="manager_team_members.php?id=<?php echo $team_id; ?>" <?php echo $current_page === 'members' ? 'class="active"' : ''; ?>>View Members</a>
-        <a href="manager_team_manage_users.php?id=<?php echo $team_id; ?>" <?php echo $current_page === 'manage' ? 'class="active"' : ''; ?>>Manage Users</a>
-        <a href="dashboard.php">My CPD</a>
+        <a href="manager_goal_details.php">Team Goal Management</a>
     </nav>
     <?php
 }
@@ -334,6 +330,7 @@ function renderPartnerNav($current_page = '') {
     ?>
     <nav class="admin-nav">
         <a href="partner_dashboard.php" <?php echo $current_page === 'dashboard' ? 'class="active"' : ''; ?>>My Teams</a>
+		<a href="manager_goal_details.php">Team Goal Management</a>
         <a href="dashboard.php">My CPD</a>
     </nav>
     <?php
