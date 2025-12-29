@@ -53,7 +53,7 @@ function updateGoalProgress($pdo, $goal_id) {
  */
 function getUserGoals($pdo, $user_id, $status = null) {
     $where_status = $status ? "AND g.status = ?" : "";
-    $params = [$user_id, $user_id, $user_id];
+    $params = [$user_id, $user_id, $user_id, $user_id];  // FIXED: Need 4 user_ids, not 3
     if ($status) {
         $params[] = $status;
     }
@@ -90,12 +90,6 @@ function getUserGoals($pdo, $user_id, $status = null) {
         $where_status
         ORDER BY g.deadline ASC, g.status ASC
     ");
-    
-    if ($status) {
-        $params[] = $user_id;
-    } else {
-        $params[] = $user_id;
-    }
     
     $stmt->execute($params);
     return $stmt->fetchAll();
