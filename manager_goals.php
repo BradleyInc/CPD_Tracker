@@ -54,8 +54,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_from_template'
 }
 
 // Get manager's teams and goals
-$managed_teams = isManager() ? getManagerTeams($pdo, $_SESSION['user_id']) : getPartnerTeams($pdo, $_SESSION['user_id']);
-$all_goals = isManager() ? getManagerGoals($pdo, $_SESSION['user_id']) : getPartnerGoals($pdo, $_SESSION['user_id']);
+if (isManager()) {
+    $managed_teams = getManagerTeams($pdo, $_SESSION['user_id']);
+    $all_goals = getManagerGoals($pdo, $_SESSION['user_id']);
+} else {
+    // For partners, get both teams and departments they manage
+    $managed_teams = getPartnerTeams($pdo, $_SESSION['user_id']);
+    $all_goals = getPartnerGoals($pdo, $_SESSION['user_id']);
+    
+    // Also get departments for dropdowns
+    $managed_departments = getPartnerDepartments($pdo, $_SESSION['user_id']);
+}
+
 $overdue_goals = getOverdueGoals($pdo, $_SESSION['user_id']);
 $approaching_goals = getApproachingDeadlineGoals($pdo, 7, $_SESSION['user_id']);
 $templates = getGoalTemplates($pdo);
@@ -168,21 +178,12 @@ $completed_goals = array_filter($all_goals, function($g) { return $g['status'] =
                         <select name="target_team_id" id="targetTeam">
                             <option value="">-- Select Team --</option>
                             <?php foreach ($managed_teams as $team): ?>
-                                <?php if (isManager()): ?>
-                                    <option value="<?php echo $team['id']; ?>">
-                                        <?php echo htmlspecialchars($team['name']); ?>
-                                    </option>
-                                <?php else: ?>
-                                    <?php 
-                                    $dept_teams = getDepartmentTeams($pdo, $team['id']);
-                                    foreach ($dept_teams as $dept_team): 
-                                    ?>
-                                        <option value="<?php echo $dept_team['id']; ?>">
-                                            <?php echo htmlspecialchars($dept_team['name']); ?> 
-                                            (<?php echo htmlspecialchars($team['name']); ?>)
-                                        </option>
-                                    <?php endforeach; ?>
-                                <?php endif; ?>
+                                <option value="<?php echo $team['id']; ?>">
+                                    <?php echo htmlspecialchars($team['name']); ?>
+                                    <?php if (isset($team['department_name'])): ?>
+                                        (<?php echo htmlspecialchars($team['department_name']); ?>)
+                                    <?php endif; ?>
+                                </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -278,21 +279,12 @@ $completed_goals = array_filter($all_goals, function($g) { return $g['status'] =
                         <select name="target_team_id" id="targetTeam2">
                             <option value="">-- Select Team --</option>
                             <?php foreach ($managed_teams as $team): ?>
-                                <?php if (isManager()): ?>
-                                    <option value="<?php echo $team['id']; ?>">
-                                        <?php echo htmlspecialchars($team['name']); ?>
-                                    </option>
-                                <?php else: ?>
-                                    <?php 
-                                    $dept_teams = getDepartmentTeams($pdo, $team['id']);
-                                    foreach ($dept_teams as $dept_team): 
-                                    ?>
-                                        <option value="<?php echo $dept_team['id']; ?>">
-                                            <?php echo htmlspecialchars($dept_team['name']); ?> 
-                                            (<?php echo htmlspecialchars($team['name']); ?>)
-                                        </option>
-                                    <?php endforeach; ?>
-                                <?php endif; ?>
+                                <option value="<?php echo $team['id']; ?>">
+                                    <?php echo htmlspecialchars($team['name']); ?>
+                                    <?php if (isset($team['department_name'])): ?>
+                                        (<?php echo htmlspecialchars($team['department_name']); ?>)
+                                    <?php endif; ?>
+                                </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
