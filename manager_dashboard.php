@@ -33,7 +33,7 @@ foreach ($managed_teams as $team) {
 <div class="container">
     <div class="admin-header">
         <h1>Manager Dashboard</h1>
-        <?php renderPartnerNav('dashboard'); ?>
+        <?php renderManagerNav($team['id'],'dashboard'); ?>
     </div>
 
     <div class="stats-grid">
@@ -87,6 +87,7 @@ foreach ($managed_teams as $team) {
                         <div class="team-actions">
                             <a href="manager_team_view.php?id=<?php echo $team['id']; ?>" class="btn btn-small">View Team</a>
                             <a href="manager_team_members.php?id=<?php echo $team['id']; ?>" class="btn btn-small btn-secondary">View Members</a>
+							<a href="manager_team_manage_users.php?id=<?php echo $team['id']; ?>" class="btn btn-small btn-secondary">Manage Users</a>
                         </div>
                     </div>
                 <?php endforeach; ?>

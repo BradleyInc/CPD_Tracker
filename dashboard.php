@@ -1,7 +1,9 @@
 <?php
 require_once 'includes/database.php';
 require_once 'includes/auth.php';
+require_once 'includes/goal_functions.php';
 require_once 'includes/team_functions.php';
+require_once 'includes/department_functions.php';
 
 // Check authentication
 checkAuth();
@@ -346,6 +348,27 @@ debugLog("Total hours: $total_hours");
 				</nav>
             </div>
         </div>
+		
+		<div class="user-teams-section">
+			<h2>My Teams</h2>
+			<?php
+			
+			$user_teams = getUserTeams($pdo, $_SESSION['user_id']);
+			if (count($user_teams) > 0): ?>
+				<div class="teams-list">
+					<?php foreach ($user_teams as $team): ?>
+						<div class="team-badge">
+							<span class="team-name"><?php echo htmlspecialchars($team['name']); ?></span>
+							<?php if (!empty($team['description'])): ?>
+								<span class="team-description"> - <?php echo htmlspecialchars($team['description']); ?></span>
+							<?php endif; ?>
+						</div>
+					<?php endforeach; ?>
+				</div>
+			<?php else: ?>
+				<p>You are not assigned to any teams yet.</p>
+			<?php endif; ?>
+		</div>
 
         <div class="cpd-form">
             <h2>Add New CPD Entry</h2>
@@ -387,112 +410,7 @@ debugLog("Total hours: $total_hours");
             </form>
         </div>
 		
-		<!-- CSV Import Section -->
-		<div class="import-section" style="border-left: 4px solid #28a745; margin-top: 2rem;">
-			<h2>Bulk Import from CSV</h2>
-			<p>Import multiple CPD entries at once using a CSV file. Download the template, fill in your data, and upload.</p>
-			<a href="import_csv.php" class="btn" style="background: #28a745;">
-				📊 Import CSV File
-			</a>
-		</div>
-
-        <div class="export-section">
-            <h2>Export CPD Records</h2>
-            <form method="GET" action="export_csv.php" id="exportForm">
-                <div class="form-group">
-                    <label>Start Date:</label>
-                    <input type="date" name="start_date" id="exportStartDate">
-                </div>
-                <div class="form-group">
-                    <label>End Date:</label>
-                    <input type="date" name="end_date" id="exportEndDate">
-                </div>
-                <div class="form-group">
-                    <label>Category:</label>
-                    <select name="category" id="exportCategory">
-                        <option value="all">All Categories</option>
-                        <option value="Training">Training</option>
-                        <option value="Conference">Conference</option>
-                        <option value="Reading">Reading</option>
-                        <option value="Online Course">Online Course</option>
-                        <option value="Other">Other</option>
-                    </select>
-                </div>
-                <button type="submit" class="btn btn-block" style="background: #28a745;">
-                    📥 Export CSV
-                </button>
-            </form>
-        </div>
-		
-		<div class="user-teams-section">
-			<h2>My Teams</h2>
-			<?php
-			$user_teams = getUserTeams($pdo, $_SESSION['user_id']);
-			if (count($user_teams) > 0): ?>
-				<div class="teams-list">
-					<?php foreach ($user_teams as $team): ?>
-						<div class="team-badge">
-							<span class="team-name"><?php echo htmlspecialchars($team['name']); ?></span>
-							<?php if (!empty($team['description'])): ?>
-								<span class="team-description"> - <?php echo htmlspecialchars($team['description']); ?></span>
-							<?php endif; ?>
-						</div>
-					<?php endforeach; ?>
-				</div>
-			<?php else: ?>
-				<p>You are not assigned to any teams yet.</p>
-			<?php endif; ?>
-		</div>
-
-		<style>
-			.user-teams-section {
-				background: #fff;
-				padding: 1.5rem;
-				border-radius: 8px;
-				box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-				margin-bottom: 2rem;
-				border-left: 4px solid #6c757d;
-			}
-			
-			.user-teams-section h2 {
-				color: #6c757d;
-				margin-top: 0;
-			}
-			
-			.teams-list {
-				display: flex;
-				flex-wrap: wrap;
-				gap: 0.5rem;
-			}
-			
-			.team-badge {
-				background: #e9f7fe;
-				border: 1px solid #b3d7ff;
-				border-radius: 20px;
-				padding: 0.5rem 1rem;
-				font-size: 0.9rem;
-			}
-			
-			.team-name {
-				font-weight: bold;
-				color: #007cba;
-			}
-			
-			.team-description {
-				color: #666;
-			}
-		</style>
-
-        <!-- Import Section -->
-        <div class="import-section">
-            <h2>Import from Calendar</h2>
-            <p>Import CPD entries from calendar (.ics) files exported from Google Calendar, Outlook, etc.</p>
-            <a href="import_ics.php" class="btn" style="background: #17a2b8;">
-                📅 Import .ics File
-            </a>
-        </div>
-
-        <h2>Your CPD Entries</h2>
+		<h2>Your CPD Entries</h2>
         <?php if (count($entries) > 0): ?>
             <form id="deleteForm" method="POST" action="" enctype="multipart/form-data">
                 <div id="bulkActions" class="bulk-actions" style="display: none; margin-bottom: 1rem;">
@@ -552,6 +470,94 @@ debugLog("Total hours: $total_hours");
         <?php else: ?>
             <p>No CPD entries yet. Add your first entry above!</p>
         <?php endif; ?>
+		<br>
+		
+		<style>
+			.user-teams-section {
+				background: #fff;
+				padding: 1.5rem;
+				border-radius: 8px;
+				box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+				margin-bottom: 2rem;
+				border-left: 4px solid #6c757d;
+			}
+			
+			.user-teams-section h2 {
+				color: #6c757d;
+				margin-top: 0;
+			}
+			
+			.teams-list {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 0.5rem;
+			}
+			
+			.team-badge {
+				background: #e9f7fe;
+				border: 1px solid #b3d7ff;
+				border-radius: 20px;
+				padding: 0.5rem 1rem;
+				font-size: 0.9rem;
+			}
+			
+			.team-name {
+				font-weight: bold;
+				color: #007cba;
+			}
+			
+			.team-description {
+				color: #666;
+			}
+		</style>
+		
+		<?php include 'includes/goals_widget.php'; ?>
+		
+		<!-- Import Section -->
+        <div class="import-section">
+            <h2>Import from Calendar</h2>
+            <p>Import CPD entries from calendar (.ics) files exported from Google Calendar, Outlook, etc.</p>
+            <a href="import_ics.php" class="btn" style="background: #17a2b8;">
+                📅 Import .ics File
+            </a>
+        </div>
+		
+		<!-- CSV Import Section -->
+		<div class="import-section" style="border-left: 4px solid #28a745; margin-top: 2rem;">
+			<h2>Bulk Import from CSV</h2>
+			<p>Import multiple CPD entries at once using a CSV file. Download the template, fill in your data, and upload.</p>
+			<a href="import_csv.php" class="btn" style="background: #28a745;">
+				📊 Import CSV File
+			</a>
+		</div>
+
+        <div class="export-section">
+            <h2>Export CPD Records</h2>
+            <form method="GET" action="export_csv.php" id="exportForm">
+                <div class="form-group">
+                    <label>Start Date:</label>
+                    <input type="date" name="start_date" id="exportStartDate">
+                </div>
+                <div class="form-group">
+                    <label>End Date:</label>
+                    <input type="date" name="end_date" id="exportEndDate">
+                </div>
+                <div class="form-group">
+                    <label>Category:</label>
+                    <select name="category" id="exportCategory">
+                        <option value="all">All Categories</option>
+                        <option value="Training">Training</option>
+                        <option value="Conference">Conference</option>
+                        <option value="Reading">Reading</option>
+                        <option value="Online Course">Online Course</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-block" style="background: #28a745;">
+                    📥 Export CSV
+                </button>
+            </form>
+        </div>
     </div>
     
     <!-- Edit Modal -->
