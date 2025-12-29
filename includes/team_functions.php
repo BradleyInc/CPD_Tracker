@@ -2,6 +2,20 @@
 // Team-related functions
 
 /**
+ * Get user details by ID
+ */
+function getUserById($pdo, $user_id) {
+    $stmt = $pdo->prepare("
+        SELECT u.*, r.name as role_name 
+        FROM users u 
+        LEFT JOIN roles r ON u.role_id = r.id 
+        WHERE u.id = ?
+    ");
+    $stmt->execute([$user_id]);
+    return $stmt->fetch();
+}
+
+/**
  * Get all teams
  */
 function getAllTeams($pdo) {

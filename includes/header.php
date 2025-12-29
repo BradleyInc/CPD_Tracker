@@ -24,6 +24,7 @@ if (session_status() === PHP_SESSION_NONE) {
                 <nav class="user-menu">
                     <span>Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?>!</span>
                     <a href="dashboard.php" class="btn btn-secondary">My CPD</a>
+					<a href="user_goals.php" class="btn btn-secondary">Goals</a>
                     
                     <?php if (isset($_SESSION['user_role'])): ?>
                         <?php if ($_SESSION['user_role'] === 'admin'): ?>

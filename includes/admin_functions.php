@@ -44,7 +44,7 @@ function updateUserRole($pdo, $user_id, $role_id) {
 
 /**
  * Get user details by ID
- */
+
 function getUserById($pdo, $user_id) {
     $stmt = $pdo->prepare("
         SELECT u.*, r.name as role_name 
@@ -55,6 +55,7 @@ function getUserById($pdo, $user_id) {
     $stmt->execute([$user_id]);
     return $stmt->fetch();
 }
+ */
 
 /**
  * Render admin navigation
@@ -62,9 +63,21 @@ function getUserById($pdo, $user_id) {
 function renderAdminNav($current_page = '') {
     ?>
     <nav class="admin-nav">
-        <a href="admin_dashboard.php" <?php echo $current_page === 'dashboard' ? 'class="active"' : ''; ?>>Dashboard</a>
-        <a href="admin_manage_users.php" <?php echo $current_page === 'users' ? 'class="active"' : ''; ?>>Manage Users</a>
-        <a href="admin_manage_teams.php" <?php echo $current_page === 'teams' ? 'class="active"' : ''; ?>>Manage Teams</a>
+        <a href="system_admin_dashboard.php" <?php echo $current_page === 'system' ? 'class="active"' : ''; ?>>
+            🚀 System Dashboard
+        </a>
+        <a href="admin_dashboard.php" <?php echo $current_page === 'dashboard' ? 'class="active"' : ''; ?>>
+            Dashboard
+        </a>
+        <a href="admin_manage_organisations.php" <?php echo $current_page === 'organisations' ? 'class="active"' : ''; ?>>
+            Organisations
+        </a>
+        <a href="admin_manage_users.php" <?php echo $current_page === 'users' ? 'class="active"' : ''; ?>>
+            Manage Users
+        </a>
+        <a href="admin_manage_teams.php" <?php echo $current_page === 'teams' ? 'class="active"' : ''; ?>>
+            Manage Teams
+        </a>
         <a href="dashboard.php">Back to Main App</a>
     </nav>
     <?php
