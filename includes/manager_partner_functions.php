@@ -104,6 +104,24 @@ function getPartnerTeams($pdo, $partner_id) {
 }
 
 /**
+ * Get departments assigned to a specific partner
+ *
+ * Returns an array of department rows (d.*) that the given partner_id is assigned to.
+ * Expected to be used by partner views where departments are treated like "managed teams".
+ */
+function getPartnerDepartments($pdo, $partner_id) {
+    $stmt = $pdo->prepare("
+        SELECT d.*
+        FROM departments d
+        JOIN partner_departments pd ON d.id = pd.department_id
+        WHERE pd.partner_id = ?
+        ORDER BY d.name
+    ");
+    $stmt->execute([$partner_id]);
+    return $stmt->fetchAll();
+}
+
+/**
  * Get all managers assigned to a team (excludes archived by default)
  */
 function getTeamManagers($pdo, $team_id, $include_archived = false) {
