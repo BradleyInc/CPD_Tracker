@@ -82,39 +82,44 @@ function getManagerTeams($pdo, $manager_id) {
 }
 
 /**
- * Get teams managed by a specific partner
+ * Get teams managed by a specific partner (including teams in their departments)
  */
 function getPartnerTeams($pdo, $partner_id) {
     $stmt = $pdo->prepare("
-        SELECT t.*, 
+        SELECT DISTINCT t.*, 
+               d.name as department_name,
                COUNT(DISTINCT ut.user_id) as member_count,
                COUNT(DISTINCT tm.manager_id) as manager_count,
                u.username as created_by_name
         FROM teams t
-        JOIN team_partners tp ON t.id = tp.team_id
+        LEFT JOIN departments d ON t.department_id = d.id
         LEFT JOIN user_teams ut ON t.id = ut.team_id
         LEFT JOIN team_managers tm ON t.id = tm.team_id
         LEFT JOIN users u ON t.created_by = u.id
-        WHERE tp.partner_id = ?
+        WHERE EXISTS (
+            SELECT 1 FROM team_partners tp WHERE tp.team_id = t.id AND tp.partner_id = ?
+        )
+        OR EXISTS (
+            SELECT 1 FROM departments d2
+            JOIN department_partners dp ON d2.id = dp.department_id
+            WHERE dp.partner_id = ? AND d2.id = t.department_id
+        )
         GROUP BY t.id
         ORDER BY t.name
     ");
-    $stmt->execute([$partner_id]);
+    $stmt->execute([$partner_id, $partner_id]);
     return $stmt->fetchAll();
 }
 
 /**
  * Get departments assigned to a specific partner
- *
- * Returns an array of department rows (d.*) that the given partner_id is assigned to.
- * Expected to be used by partner views where departments are treated like "managed teams".
  */
 function getPartnerDepartments($pdo, $partner_id) {
     $stmt = $pdo->prepare("
         SELECT d.*
         FROM departments d
-        JOIN partner_departments pd ON d.id = pd.department_id
-        WHERE pd.partner_id = ?
+        JOIN department_partners dp ON d.id = dp.department_id
+        WHERE dp.partner_id = ?
         ORDER BY d.name
     ");
     $stmt->execute([$partner_id]);

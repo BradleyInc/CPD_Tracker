@@ -53,7 +53,7 @@ function updateGoalProgress($pdo, $goal_id) {
  */
 function getUserGoals($pdo, $user_id, $status = null) {
     $where_status = $status ? "AND g.status = ?" : "";
-    $params = [$user_id, $user_id, $user_id, $user_id];  // FIXED: Need 4 user_ids, not 3
+    $params = [$user_id, $user_id, $user_id, $user_id];
     if ($status) {
         $params[] = $status;
     }
@@ -126,7 +126,11 @@ function getManagerGoals($pdo, $manager_id) {
 }
 
 /**
- * Get goals set by a partner for their department(s)
+ * Get all goals that a partner can see/manager
+ * This includes:
+ * 1. Goals set by the partner (g.set_by = ?)
+ * 2. Goals assigned to departments the partner manages
+ * 3. Goals assigned to teams the partner manages (directly or via department)
  */
 function getPartnerGoals($pdo, $partner_id) {
     $stmt = $pdo->prepare("
@@ -145,12 +149,19 @@ function getPartnerGoals($pdo, $partner_id) {
         LEFT JOIN teams t ON g.target_team_id = t.id
         LEFT JOIN departments d ON g.target_department_id = d.id
         LEFT JOIN goal_progress gp ON g.id = gp.goal_id
-        WHERE g.set_by = ?
-        AND (
+        WHERE (
+            -- Goals set by this partner
+            g.set_by = ?
+            OR 
+            -- Goals assigned to departments this partner manages
             g.target_department_id IN (
                 SELECT department_id FROM department_partners WHERE partner_id = ?
             )
-            OR g.target_team_id IN (
+            OR 
+            -- Goals assigned to teams this partner manages (directly or via department)
+            g.target_team_id IN (
+                SELECT team_id FROM team_partners WHERE partner_id = ?
+                UNION
                 SELECT t2.id FROM teams t2
                 JOIN departments d2 ON t2.department_id = d2.id
                 JOIN department_partners dp ON d2.id = dp.department_id
@@ -161,7 +172,7 @@ function getPartnerGoals($pdo, $partner_id) {
         ORDER BY g.deadline ASC, g.status ASC
     ");
     
-    $stmt->execute([$partner_id, $partner_id, $partner_id]);
+    $stmt->execute([$partner_id, $partner_id, $partner_id, $partner_id]);
     return $stmt->fetchAll();
 }
 
@@ -259,31 +270,85 @@ function deleteGoal($pdo, $goal_id) {
  * Get overdue goals
  */
 function getOverdueGoals($pdo, $set_by = null) {
-    $where_clause = $set_by ? "AND g.set_by = ?" : "";
-    $params = $set_by ? [$set_by] : [];
+    // First check if user is a partner
+    $is_partner = false;
+    if ($set_by) {
+        $stmt = $pdo->prepare("SELECT r.name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?");
+        $stmt->execute([$set_by]);
+        $role = $stmt->fetchColumn();
+        $is_partner = ($role === 'partner');
+    }
     
-    $stmt = $pdo->prepare("
-        SELECT 
-            g.*,
-            CASE 
-                WHEN g.goal_type = 'individual' THEN u2.username
-                WHEN g.goal_type = 'team' THEN t.name
-                WHEN g.goal_type = 'department' THEN d.name
-            END as target_name,
-            AVG(gp.progress_percentage) as avg_progress,
-            COUNT(DISTINCT gp.user_id) as affected_users
-        FROM cpd_goals g
-        LEFT JOIN users u2 ON g.target_user_id = u2.id
-        LEFT JOIN teams t ON g.target_team_id = t.id
-        LEFT JOIN departments d ON g.target_department_id = d.id
-        LEFT JOIN goal_progress gp ON g.id = gp.goal_id
-        WHERE g.status = 'overdue'
-        $where_clause
-        GROUP BY g.id
-        ORDER BY g.deadline ASC
-    ");
+    if ($set_by && $is_partner) {
+        // Partner-specific logic
+        $stmt = $pdo->prepare("
+            SELECT 
+                g.*,
+                CASE 
+                    WHEN g.goal_type = 'individual' THEN u2.username
+                    WHEN g.goal_type = 'team' THEN t.name
+                    WHEN g.goal_type = 'department' THEN d.name
+                END as target_name,
+                AVG(gp.progress_percentage) as avg_progress,
+                COUNT(DISTINCT gp.user_id) as affected_users
+            FROM cpd_goals g
+            LEFT JOIN users u2 ON g.target_user_id = u2.id
+            LEFT JOIN teams t ON g.target_team_id = t.id
+            LEFT JOIN departments d ON g.target_department_id = d.id
+            LEFT JOIN goal_progress gp ON g.id = gp.goal_id
+            WHERE g.status = 'overdue'
+            AND (
+                -- Goals set by this partner
+                g.set_by = ?
+                OR 
+                -- Goals assigned to departments this partner manages
+                g.target_department_id IN (
+                    SELECT department_id FROM department_partners WHERE partner_id = ?
+                )
+                OR 
+                -- Goals assigned to teams this partner manages (directly or via department)
+                g.target_team_id IN (
+                    SELECT team_id FROM team_partners WHERE partner_id = ?
+                    UNION
+                    SELECT t2.id FROM teams t2
+                    JOIN departments d2 ON t2.department_id = d2.id
+                    JOIN department_partners dp ON d2.id = dp.department_id
+                    WHERE dp.partner_id = ?
+                )
+            )
+            GROUP BY g.id
+            ORDER BY g.deadline ASC
+        ");
+        $stmt->execute([$set_by, $set_by, $set_by, $set_by]);
+    } else {
+        // Original logic for non-partners
+        $where_clause = $set_by ? "AND g.set_by = ?" : "";
+        $params = $set_by ? [$set_by] : [];
+        
+        $stmt = $pdo->prepare("
+            SELECT 
+                g.*,
+                CASE 
+                    WHEN g.goal_type = 'individual' THEN u2.username
+                    WHEN g.goal_type = 'team' THEN t.name
+                    WHEN g.goal_type = 'department' THEN d.name
+                END as target_name,
+                AVG(gp.progress_percentage) as avg_progress,
+                COUNT(DISTINCT gp.user_id) as affected_users
+            FROM cpd_goals g
+            LEFT JOIN users u2 ON g.target_user_id = u2.id
+            LEFT JOIN teams t ON g.target_team_id = t.id
+            LEFT JOIN departments d ON g.target_department_id = d.id
+            LEFT JOIN goal_progress gp ON g.id = gp.goal_id
+            WHERE g.status = 'overdue'
+            $where_clause
+            GROUP BY g.id
+            ORDER BY g.deadline ASC
+        ");
+        
+        $stmt->execute($params);
+    }
     
-    $stmt->execute($params);
     return $stmt->fetchAll();
 }
 
@@ -291,36 +356,92 @@ function getOverdueGoals($pdo, $set_by = null) {
  * Get goals approaching deadline
  */
 function getApproachingDeadlineGoals($pdo, $days = 7, $set_by = null) {
-    $where_clause = $set_by ? "AND g.set_by = ?" : "";
-    $params = [$days];
+    // First check if user is a partner
+    $is_partner = false;
     if ($set_by) {
-        $params[] = $set_by;
+        $stmt = $pdo->prepare("SELECT r.name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?");
+        $stmt->execute([$set_by]);
+        $role = $stmt->fetchColumn();
+        $is_partner = ($role === 'partner');
     }
     
-    $stmt = $pdo->prepare("
-        SELECT 
-            g.*,
-            CASE 
-                WHEN g.goal_type = 'individual' THEN u2.username
-                WHEN g.goal_type = 'team' THEN t.name
-                WHEN g.goal_type = 'department' THEN d.name
-            END as target_name,
-            AVG(gp.progress_percentage) as avg_progress,
-            DATEDIFF(g.deadline, CURDATE()) as days_remaining
-        FROM cpd_goals g
-        LEFT JOIN users u2 ON g.target_user_id = u2.id
-        LEFT JOIN teams t ON g.target_team_id = t.id
-        LEFT JOIN departments d ON g.target_department_id = d.id
-        LEFT JOIN goal_progress gp ON g.id = gp.goal_id
-        WHERE g.status = 'active'
-        AND DATEDIFF(g.deadline, CURDATE()) <= ?
-        AND DATEDIFF(g.deadline, CURDATE()) >= 0
-        $where_clause
-        GROUP BY g.id
-        ORDER BY g.deadline ASC
-    ");
+    if ($set_by && $is_partner) {
+        // Partner-specific logic
+        $stmt = $pdo->prepare("
+            SELECT 
+                g.*,
+                CASE 
+                    WHEN g.goal_type = 'individual' THEN u2.username
+                    WHEN g.goal_type = 'team' THEN t.name
+                    WHEN g.goal_type = 'department' THEN d.name
+                END as target_name,
+                AVG(gp.progress_percentage) as avg_progress,
+                DATEDIFF(g.deadline, CURDATE()) as days_remaining
+            FROM cpd_goals g
+            LEFT JOIN users u2 ON g.target_user_id = u2.id
+            LEFT JOIN teams t ON g.target_team_id = t.id
+            LEFT JOIN departments d ON g.target_department_id = d.id
+            LEFT JOIN goal_progress gp ON g.id = gp.goal_id
+            WHERE g.status = 'active'
+            AND DATEDIFF(g.deadline, CURDATE()) <= ?
+            AND DATEDIFF(g.deadline, CURDATE()) >= 0
+            AND (
+                -- Goals set by this partner
+                g.set_by = ?
+                OR 
+                -- Goals assigned to departments this partner manages
+                g.target_department_id IN (
+                    SELECT department_id FROM department_partners WHERE partner_id = ?
+                )
+                OR 
+                -- Goals assigned to teams this partner manages (directly or via department)
+                g.target_team_id IN (
+                    SELECT team_id FROM team_partners WHERE partner_id = ?
+                    UNION
+                    SELECT t2.id FROM teams t2
+                    JOIN departments d2 ON t2.department_id = d2.id
+                    JOIN department_partners dp ON d2.id = dp.department_id
+                    WHERE dp.partner_id = ?
+                )
+            )
+            GROUP BY g.id
+            ORDER BY g.deadline ASC
+        ");
+        $stmt->execute([$days, $set_by, $set_by, $set_by, $set_by]);
+    } else {
+        // Original logic for non-partners
+        $where_clause = $set_by ? "AND g.set_by = ?" : "";
+        $params = [$days];
+        if ($set_by) {
+            $params[] = $set_by;
+        }
+        
+        $stmt = $pdo->prepare("
+            SELECT 
+                g.*,
+                CASE 
+                    WHEN g.goal_type = 'individual' THEN u2.username
+                    WHEN g.goal_type = 'team' THEN t.name
+                    WHEN g.goal_type = 'department' THEN d.name
+                END as target_name,
+                AVG(gp.progress_percentage) as avg_progress,
+                DATEDIFF(g.deadline, CURDATE()) as days_remaining
+            FROM cpd_goals g
+            LEFT JOIN users u2 ON g.target_user_id = u2.id
+            LEFT JOIN teams t ON g.target_team_id = t.id
+            LEFT JOIN departments d ON g.target_department_id = d.id
+            LEFT JOIN goal_progress gp ON g.id = gp.goal_id
+            WHERE g.status = 'active'
+            AND DATEDIFF(g.deadline, CURDATE()) <= ?
+            AND DATEDIFF(g.deadline, CURDATE()) >= 0
+            $where_clause
+            GROUP BY g.id
+            ORDER BY g.deadline ASC
+        ");
+        
+        $stmt->execute($params);
+    }
     
-    $stmt->execute($params);
     return $stmt->fetchAll();
 }
 
@@ -376,28 +497,60 @@ function createGoalFromTemplate($pdo, $template_id, $target_data, $set_by) {
  * Get goal statistics for dashboard
  */
 function getGoalStatistics($pdo, $user_id) {
-    $stmt = $pdo->prepare("
-        SELECT 
-            COUNT(*) as total_goals,
-            SUM(CASE WHEN g.status = 'active' THEN 1 ELSE 0 END) as active_goals,
-            SUM(CASE WHEN g.status = 'completed' THEN 1 ELSE 0 END) as completed_goals,
-            SUM(CASE WHEN g.status = 'overdue' THEN 1 ELSE 0 END) as overdue_goals,
-            AVG(gp.progress_percentage) as avg_progress
-        FROM cpd_goals g
-        LEFT JOIN goal_progress gp ON g.id = gp.goal_id AND gp.user_id = ?
-        WHERE (
-            g.target_user_id = ?
-            OR g.target_team_id IN (SELECT team_id FROM user_teams WHERE user_id = ?)
-            OR g.target_department_id IN (
-                SELECT d.id FROM departments d
-                JOIN teams t ON d.id = t.department_id
-                JOIN user_teams ut ON t.id = ut.team_id
-                WHERE ut.user_id = ?
-            )
-        )
-    ");
+    // First check if user is a partner
+    $stmt = $pdo->prepare("SELECT r.name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?");
+    $stmt->execute([$user_id]);
+    $role = $stmt->fetchColumn();
     
-    $stmt->execute([$user_id, $user_id, $user_id, $user_id]);
+    if ($role === 'partner') {
+        // For partners viewing THEIR OWN goals (not goals they manage for others)
+        // Use the SAME logic as regular users
+        $stmt = $pdo->prepare("
+            SELECT 
+                COUNT(*) as total_goals,
+                SUM(CASE WHEN g.status = 'active' THEN 1 ELSE 0 END) as active_goals,
+                SUM(CASE WHEN g.status = 'completed' THEN 1 ELSE 0 END) as completed_goals,
+                SUM(CASE WHEN g.status = 'overdue' THEN 1 ELSE 0 END) as overdue_goals,
+                AVG(gp.progress_percentage) as avg_progress
+            FROM cpd_goals g
+            LEFT JOIN goal_progress gp ON g.id = gp.goal_id AND gp.user_id = ?
+            WHERE (
+                g.target_user_id = ?
+                OR g.target_team_id IN (SELECT team_id FROM user_teams WHERE user_id = ?)
+                OR g.target_department_id IN (
+                    SELECT d.id FROM departments d
+                    JOIN teams t ON d.id = t.department_id
+                    JOIN user_teams ut ON t.id = ut.team_id
+                    WHERE ut.user_id = ?
+                )
+            )
+        ");
+        $stmt->execute([$user_id, $user_id, $user_id, $user_id]);
+    } else {
+        // Original logic for non-partners
+        $stmt = $pdo->prepare("
+            SELECT 
+                COUNT(*) as total_goals,
+                SUM(CASE WHEN g.status = 'active' THEN 1 ELSE 0 END) as active_goals,
+                SUM(CASE WHEN g.status = 'completed' THEN 1 ELSE 0 END) as completed_goals,
+                SUM(CASE WHEN g.status = 'overdue' THEN 1 ELSE 0 END) as overdue_goals,
+                AVG(gp.progress_percentage) as avg_progress
+            FROM cpd_goals g
+            LEFT JOIN goal_progress gp ON g.id = gp.goal_id AND gp.user_id = ?
+            WHERE (
+                g.target_user_id = ?
+                OR g.target_team_id IN (SELECT team_id FROM user_teams WHERE user_id = ?)
+                OR g.target_department_id IN (
+                    SELECT d.id FROM departments d
+                    JOIN teams t ON d.id = t.department_id
+                    JOIN user_teams ut ON t.id = ut.team_id
+                    WHERE ut.user_id = ?
+                )
+            )
+        ");
+        $stmt->execute([$user_id, $user_id, $user_id, $user_id]);
+    }
+    
     return $stmt->fetch();
 }
 

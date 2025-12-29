@@ -213,4 +213,35 @@ function canUserAccessTeam($pdo, $user_id, $team_id) {
     // Regular users can only access teams they belong to
     return isUserInTeam($pdo, $user_id, $team_id);
 }
+
+/**
+ * Get department member summary for partners
+ * This is used when partners need to see members in their departments
+ */
+function getDepartmentMemberSummary($pdo, $department_id) {
+    $stmt = $pdo->prepare("
+        SELECT DISTINCT u.id, u.username, u.email
+        FROM users u
+        JOIN user_teams ut ON u.id = ut.user_id
+        JOIN teams t ON ut.team_id = t.id
+        WHERE t.department_id = ?
+        ORDER BY u.username
+    ");
+    $stmt->execute([$department_id]);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Get teams in a department
+ */
+function getDepartmentTeams($pdo, $department_id) {
+    $stmt = $pdo->prepare("
+        SELECT t.*
+        FROM teams t
+        WHERE t.department_id = ?
+        ORDER BY t.name
+    ");
+    $stmt->execute([$department_id]);
+    return $stmt->fetchAll();
+}
 ?>

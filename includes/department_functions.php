@@ -169,7 +169,7 @@ function isPartnerOfDepartment($pdo, $partner_id, $dept_id) {
 
 /**
  * Get teams in a department
- */
+
 function getDepartmentTeams($pdo, $dept_id) {
     $stmt = $pdo->prepare("
         SELECT t.*,
@@ -185,6 +185,7 @@ function getDepartmentTeams($pdo, $dept_id) {
     $stmt->execute([$dept_id]);
     return $stmt->fetchAll();
 }
+ */
 
 /**
  * Get department CPD statistics
@@ -243,7 +244,7 @@ function getDepartmentCPDEntries($pdo, $dept_id, $start_date = null, $end_date =
 
 /**
  * Get department member summary
- */
+
 function getDepartmentMemberSummary($pdo, $dept_id, $start_date = null, $end_date = null) {
     $query = "
         SELECT 
@@ -278,6 +279,7 @@ function getDepartmentMemberSummary($pdo, $dept_id, $start_date = null, $end_dat
     $stmt->execute($params);
     return $stmt->fetchAll();
 }
+ */
 
 /**
  * Check if user can access department (is partner, manager of team in dept, or admin)
