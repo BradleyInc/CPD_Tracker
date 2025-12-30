@@ -27,7 +27,10 @@ if (session_status() === PHP_SESSION_NONE) {
 					<a href="user_goals.php" class="btn btn-secondary">Goals</a>
                     
                     <?php if (isset($_SESSION['user_role'])): ?>
-                        <?php if ($_SESSION['user_role'] === 'admin'): ?>
+                        <?php if ($_SESSION['user_role'] === 'super_admin'): ?>
+                            <a href="system_admin_dashboard.php" class="btn btn-secondary">🚀 System Admin</a>
+                        <?php endif; ?>
+                        <?php if ($_SESSION['user_role'] === 'admin' || $_SESSION['user_role'] === 'super_admin'): ?>
                             <a href="admin_dashboard.php" class="btn btn-secondary">Admin Panel</a>
                         <?php elseif ($_SESSION['user_role'] === 'manager'): ?>
                             <a href="manager_dashboard.php" class="btn btn-secondary">Manager Dashboard</a>

@@ -9,6 +9,20 @@ function isAdmin() {
 }
 
 /**
+ * Check if current user is super admin (internal SaaS staff)
+ */
+function isSuperAdmin() {
+    return isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'super_admin';
+}
+
+/**
+ * Check if current user is admin OR super admin
+ */
+function isAdminOrSuper() {
+    return isAdmin() || isSuperAdmin();
+}
+
+/**
  * Get all users for admin view (excludes archived by default)
  */
 function getAllUsers($pdo, $include_archived = false) {
@@ -100,4 +114,5 @@ function renderTeamNav($team_id, $current_page = '') {
     </nav>
     <?php
 }
+
 ?>
