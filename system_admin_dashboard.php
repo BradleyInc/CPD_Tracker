@@ -7,8 +7,9 @@ require_once 'includes/system_admin_functions.php';
 
 // Check authentication and admin role
 checkAuth();
-if (!isAdmin()) {
-    header('Location: dashboard.php');
+if (!isSuperAdmin()) {
+    // Redirect regular admins to their tenant dashboard
+    header('Location: admin_dashboard.php');
     exit();
 }
 

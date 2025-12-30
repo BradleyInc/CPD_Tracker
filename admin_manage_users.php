@@ -6,7 +6,7 @@ require_once 'includes/user_management_functions.php';
 
 // Check authentication and admin role
 checkAuth();
-if (!isAdmin()) {
+if (!isAdminOrSuper()) {
     header('Location: dashboard.php');
     exit();
 }
@@ -18,7 +18,6 @@ include 'includes/header.php';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_role'])) {
     $user_id = intval($_POST['user_id']);
     $role_id = intval($_POST['role_id']);
-    
     if (updateUserRole($pdo, $user_id, $role_id)) {
         $message = '<div class="alert alert-success">User role updated successfully!</div>';
     } else {

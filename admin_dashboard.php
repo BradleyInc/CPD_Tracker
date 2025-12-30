@@ -5,7 +5,7 @@ require_once 'includes/admin_functions.php';
 
 // Check authentication and admin role
 checkAuth();
-if (!isAdmin()) {
+if (!isAdminOrSuper()) {
     header('Location: dashboard.php');
     exit();
 }
