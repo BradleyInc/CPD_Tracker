@@ -13,6 +13,36 @@ function debugLog($message) {
     error_log("CPD DEBUG: " . $message);
 }
 
+function updateUserGoalProgress($pdo, $user_id) {
+    // Get all active/overdue goals that apply to this user
+    $stmt = $pdo->prepare("
+        SELECT DISTINCT g.id
+        FROM cpd_goals g
+        WHERE g.status IN ('active', 'overdue')
+        AND (
+            g.target_user_id = ?
+            OR g.target_team_id IN (SELECT team_id FROM user_teams WHERE user_id = ?)
+            OR g.target_department_id IN (
+                SELECT d.id FROM departments d
+                JOIN teams t ON d.id = t.department_id
+                JOIN user_teams ut ON t.id = ut.team_id
+                WHERE ut.user_id = ?
+            )
+        )
+    ");
+    $stmt->execute([$user_id, $user_id, $user_id]);
+    $goal_ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    
+    $updated_count = 0;
+    foreach ($goal_ids as $goal_id) {
+        if (updateGoalProgress($pdo, $goal_id)) {
+            $updated_count++;
+        }
+    }
+    
+    return $updated_count;
+}
+
 // Handle bulk delete
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     debugLog("POST request received: " . print_r($_POST, true));
@@ -42,6 +72,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             if ($deleted_count > 0) {
                 echo "<div class='alert alert-success'>Successfully deleted $deleted_count CPD entry(ies).</div>";
+				// Update goal progress
+				$updated_goals = updateUserGoalProgress($pdo, $_SESSION['user_id']);
+				if ($updated_goals > 0) {
+					debugLog("Updated progress for $updated_goals goal(s) after deletion");
+				}
             }
             
             if ($error_count > 0) {
@@ -139,6 +174,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($stmt->rowCount() > 0) {
                         echo "<div class='alert alert-success'>CPD entry updated successfully!</div>";
                         debugLog("Update successful for entry ID: $entry_id");
+						// Update goal progress
+						$updated_goals = updateUserGoalProgress($pdo, $_SESSION['user_id']);
+						if ($updated_goals > 0) {
+							debugLog("Updated progress for $updated_goals goal(s)");
+						}
                     } else {
                         echo "<div class='alert alert-error'>No changes were made to the entry. This could mean the data was identical.</div>";
                         debugLog("No rows affected by update");
@@ -201,6 +241,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 
                 echo "<div class='alert alert-success'>CPD entry added successfully!</div>";
+				// Update goal progress
+				$updated_goals = updateUserGoalProgress($pdo, $_SESSION['user_id']);
+				if ($updated_goals > 0) {
+					debugLog("Updated progress for $updated_goals goal(s)");
+				}
             } catch (PDOException $e) {
                 error_log("CPD entry error: " . $e->getMessage());
                 echo "<div class='alert alert-error'>Error adding CPD entry: " . htmlspecialchars($e->getMessage()) . "</div>";
