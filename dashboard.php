@@ -370,29 +370,9 @@ debugLog("Total hours: $total_hours");
             Server Time: <?php echo date('Y-m-d H:i:s'); ?>
         </div>
         
-        <div class="header">
-            <div class="header-content">
-                <div class="logo">
-                    <a href="dashboard.php">CPD Tracker</a>
-                </div>
-                <nav class="user-menu">
-					<span>Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?>!</span>
-					<a href="dashboard.php" class="btn btn-secondary">Dashboard</a>
-					<a href="user_goals.php" class="btn btn-secondary">Goals</a>
-					<?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'admin'): ?>
-						<a href="admin_dashboard.php" class="btn btn-secondary">Admin Dashboard</a>
-					<?php endif; ?>
-					<?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'partner'): ?>
-						<a href="partner_dashboard.php" class="btn btn-secondary">Partner Dashboard</a>
-					<?php endif; ?>
-					<?php if (isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'manager'): ?>
-						<a href="manager_dashboard.php" class="btn btn-secondary">Manager Dashboard</a>
-					<?php endif; ?>
-					
-					<a href="logout.php" class="btn btn-secondary">Logout</a>
-				</nav>
-            </div>
-        </div>
+		
+		
+		<?php include_once 'includes/header.php';?>
 		
 		<div class="user-teams-section">
 			<h2>My Teams</h2>

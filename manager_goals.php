@@ -4,6 +4,7 @@ require_once 'includes/auth.php';
 require_once 'includes/manager_partner_functions.php';
 require_once 'includes/team_functions.php';
 require_once 'includes/goal_functions.php';
+require_once 'includes/department_functions.php';
 
 // Check authentication and manager role
 checkAuth();
