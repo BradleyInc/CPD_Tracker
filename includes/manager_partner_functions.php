@@ -113,7 +113,7 @@ function getPartnerTeams($pdo, $partner_id) {
 
 /**
  * Get departments assigned to a specific partner
- */
+
 function getPartnerDepartments($pdo, $partner_id) {
     $stmt = $pdo->prepare("
         SELECT d.*
@@ -125,6 +125,7 @@ function getPartnerDepartments($pdo, $partner_id) {
     $stmt->execute([$partner_id]);
     return $stmt->fetchAll();
 }
+ */
 
 /**
  * Get all managers assigned to a team (excludes archived by default)

@@ -217,7 +217,7 @@ function canUserAccessTeam($pdo, $user_id, $team_id) {
 /**
  * Get department member summary for partners
  * This is used when partners need to see members in their departments
- */
+
 function getDepartmentMemberSummary($pdo, $department_id) {
     $stmt = $pdo->prepare("
         SELECT DISTINCT u.id, u.username, u.email
@@ -230,15 +230,21 @@ function getDepartmentMemberSummary($pdo, $department_id) {
     $stmt->execute([$department_id]);
     return $stmt->fetchAll();
 }
+ */
 
 /**
- * Get teams in a department
+ * Get teams in a department with member counts
  */
 function getDepartmentTeams($pdo, $department_id) {
     $stmt = $pdo->prepare("
-        SELECT t.*
+        SELECT t.*,
+               COUNT(DISTINCT ut.user_id) as member_count,
+               u.username as created_by_name
         FROM teams t
+        LEFT JOIN user_teams ut ON t.id = ut.team_id
+        LEFT JOIN users u ON t.created_by = u.id
         WHERE t.department_id = ?
+        GROUP BY t.id
         ORDER BY t.name
     ");
     $stmt->execute([$department_id]);

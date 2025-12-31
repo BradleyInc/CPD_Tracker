@@ -170,6 +170,7 @@ function isPartnerOfDepartment($pdo, $partner_id, $dept_id) {
 /**
  * Get teams in a department
 
+
 function getDepartmentTeams($pdo, $dept_id) {
     $stmt = $pdo->prepare("
         SELECT t.*,
@@ -185,7 +186,8 @@ function getDepartmentTeams($pdo, $dept_id) {
     $stmt->execute([$dept_id]);
     return $stmt->fetchAll();
 }
- */
+*/
+
 
 /**
  * Get department CPD statistics
@@ -243,26 +245,30 @@ function getDepartmentCPDEntries($pdo, $dept_id, $start_date = null, $end_date =
 }
 
 /**
- * Get department member summary
-
+ * Get department member summary with CPD statistics
+ */
 function getDepartmentMemberSummary($pdo, $dept_id, $start_date = null, $end_date = null) {
     $query = "
         SELECT 
             u.id as user_id,
             u.username,
+            u.email,
             t.name as team_name,
-            COUNT(ce.id) as total_entries,
+            t.id as team_id,
+            COUNT(DISTINCT ce.id) as total_entries,
             COALESCE(SUM(ce.hours), 0) as total_hours,
             MAX(ce.date_completed) as last_entry_date
         FROM users u
         JOIN user_teams ut ON u.id = ut.user_id
         JOIN teams t ON ut.team_id = t.id
         LEFT JOIN cpd_entries ce ON u.id = ce.user_id
-        WHERE t.department_id = ? AND u.archived = 0
+        WHERE t.department_id = ? 
+        AND u.archived = 0
     ";
     
     $params = [$dept_id];
     
+    // Add date filters if provided
     if ($start_date) {
         $query .= " AND (ce.date_completed >= ? OR ce.date_completed IS NULL)";
         $params[] = $start_date;
@@ -273,13 +279,16 @@ function getDepartmentMemberSummary($pdo, $dept_id, $start_date = null, $end_dat
         $params[] = $end_date;
     }
     
-    $query .= " GROUP BY u.id, u.username, t.name ORDER BY u.username";
+    $query .= " 
+        GROUP BY u.id, u.username, u.email, t.name, t.id
+        ORDER BY t.name, u.username
+    ";
     
     $stmt = $pdo->prepare($query);
     $stmt->execute($params);
     return $stmt->fetchAll();
 }
- */
+
 
 /**
  * Check if user can access department (is partner, manager of team in dept, or admin)
