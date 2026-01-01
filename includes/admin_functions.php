@@ -24,9 +24,26 @@ function isAdminOrSuper() {
 
 /**
  * Get all users for admin view (excludes archived by default)
+ * Regular admins only see users in their organisation
  */
 function getAllUsers($pdo, $include_archived = false) {
-    $where_clause = $include_archived ? "" : "WHERE u.archived = 0";
+    $where_clauses = [];
+    $params = [];
+    
+    if (!$include_archived) {
+        $where_clauses[] = "u.archived = 0";
+    }
+    
+    // Regular admins can only see users in their organisation
+    if (isAdmin() && !isSuperAdmin()) {
+        $admin_org_id = getAdminOrganisationId($pdo, $_SESSION['user_id']);
+        if ($admin_org_id) {
+            $where_clauses[] = "u.organisation_id = ?";
+            $params[] = $admin_org_id;
+        }
+    }
+    
+    $where_clause = !empty($where_clauses) ? "WHERE " . implode(" AND ", $where_clauses) : "";
     
     $stmt = $pdo->prepare("
         SELECT u.id, u.username, u.email, u.created_at, u.archived, r.name as role_name 
@@ -35,7 +52,7 @@ function getAllUsers($pdo, $include_archived = false) {
         $where_clause
         ORDER BY u.created_at DESC
     ");
-    $stmt->execute();
+    $stmt->execute($params);
     return $stmt->fetchAll();
 }
 
@@ -77,14 +94,16 @@ function getUserById($pdo, $user_id) {
 function renderAdminNav($current_page = '') {
     ?>
     <nav class="admin-nav">
+        <?php if (isSuperAdmin()): ?>
         <a href="system_admin_dashboard.php" <?php echo $current_page === 'system' ? 'class="active"' : ''; ?>>
             🚀 System Dashboard
         </a>
+        <?php endif; ?>
         <a href="admin_dashboard.php" <?php echo $current_page === 'dashboard' ? 'class="active"' : ''; ?>>
             Dashboard
         </a>
         <a href="admin_manage_organisations.php" <?php echo $current_page === 'organisations' ? 'class="active"' : ''; ?>>
-            Organisations
+            <?php echo isSuperAdmin() ? 'Organisations' : 'My Organisation'; ?>
         </a>
         <a href="admin_manage_users.php" <?php echo $current_page === 'users' ? 'class="active"' : ''; ?>>
             Manage Users
@@ -115,4 +134,30 @@ function renderTeamNav($team_id, $current_page = '') {
     <?php
 }
 
+/**
+ * Get admin's organization ID
+ */
+function getAdminOrganisationId($pdo, $user_id) {
+    $stmt = $pdo->prepare("SELECT organisation_id FROM users WHERE id = ?");
+    $stmt->execute([$user_id]);
+    return $stmt->fetchColumn();
+}
+
+/**
+ * Check if admin can access organisation
+ */
+function canAdminAccessOrganisation($pdo, $user_id, $org_id) {
+    // Super admins can access everything
+    if (isSuperAdmin()) {
+        return true;
+    }
+    
+    // Regular admins can only access their own organisation
+    if (isAdmin()) {
+        $admin_org_id = getAdminOrganisationId($pdo, $user_id);
+        return $admin_org_id == $org_id;
+    }
+    
+    return false;
+}
 ?>

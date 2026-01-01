@@ -23,6 +23,19 @@ function getOrganisationById($pdo, $org_id) {
  * Get all organisations (super admin only)
  */
 function getAllOrganisations($pdo) {
+    $where_clause = "";
+    $params = [];
+    
+    // Regular admins can only see their own organisation
+    if (isAdmin() && !isSuperAdmin()) {
+        require_once 'admin_functions.php';
+        $admin_org_id = getAdminOrganisationId($pdo, $_SESSION['user_id']);
+        if ($admin_org_id) {
+            $where_clause = "WHERE o.id = ?";
+            $params[] = $admin_org_id;
+        }
+    }
+    
     $stmt = $pdo->prepare("
         SELECT o.*,
                COUNT(DISTINCT u.id) as user_count,
@@ -30,10 +43,11 @@ function getAllOrganisations($pdo) {
         FROM organisations o
         LEFT JOIN users u ON o.id = u.organisation_id
         LEFT JOIN departments d ON o.id = d.organisation_id
+        $where_clause
         GROUP BY o.id
         ORDER BY o.name
     ");
-    $stmt->execute();
+    $stmt->execute($params);
     return $stmt->fetchAll();
 }
 

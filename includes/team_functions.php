@@ -19,17 +19,34 @@ function getUserById($pdo, $user_id) {
  * Get all teams
  */
 function getAllTeams($pdo) {
+    $join_clause = "";
+    $where_clause = "";
+    $params = [];
+    
+    // Regular admins can only see teams in their organisation
+    if (isAdmin() && !isSuperAdmin()) {
+        require_once 'admin_functions.php';
+        $admin_org_id = getAdminOrganisationId($pdo, $_SESSION['user_id']);
+        if ($admin_org_id) {
+            $join_clause = "LEFT JOIN departments d ON t.department_id = d.id";
+            $where_clause = "WHERE d.organisation_id = ? OR t.department_id IS NULL";
+            $params[] = $admin_org_id;
+        }
+    }
+    
     $stmt = $pdo->prepare("
         SELECT t.*, 
                COUNT(ut.user_id) as member_count,
                u.username as created_by_name
         FROM teams t
+        $join_clause
         LEFT JOIN user_teams ut ON t.id = ut.team_id
         LEFT JOIN users u ON t.created_by = u.id
+        $where_clause
         GROUP BY t.id
         ORDER BY t.name
     ");
-    $stmt->execute();
+    $stmt->execute($params);
     return $stmt->fetchAll();
 }
 
