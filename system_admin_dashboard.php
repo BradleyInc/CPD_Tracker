@@ -5,7 +5,7 @@ require_once 'includes/admin_functions.php';
 require_once 'includes/organisation_functions.php';
 require_once 'includes/system_admin_functions.php';
 
-// Check authentication and admin role
+// Check authentication and admin role - ONLY SUPER ADMINS
 checkAuth();
 if (!isSuperAdmin()) {
     // Redirect regular admins to their tenant dashboard

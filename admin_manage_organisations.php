@@ -11,12 +11,13 @@ if (!isAdminOrSuper()) {
     exit();
 }
 
-$pageTitle = 'Manage Organisations';
+// Determine page title based on admin type
+$pageTitle = isSuperAdmin() ? 'Manage Organisations' : 'My Organisation';
 include 'includes/header.php';
 
-// Handle organisation creation
+// Handle organisation creation (SUPER ADMIN ONLY)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['create_organisation'])) {
+    if (isset($_POST['create_organisation']) && isSuperAdmin()) {
         $name = trim($_POST['org_name']);
         $description = trim($_POST['org_description']);
         $subscription_plan = $_POST['subscription_plan'];
@@ -51,8 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     
-    // Handle organisation deletion
-    if (isset($_POST['delete_organisation'])) {
+    // Handle organisation deletion (SUPER ADMIN ONLY)
+    if (isset($_POST['delete_organisation']) && isSuperAdmin()) {
         $org_id = intval($_POST['org_id']);
         if (deleteOrganisation($pdo, $org_id)) {
             $success_message = "Organisation deleted successfully!";
@@ -74,9 +75,14 @@ $expiring_trials = getExpiringTrials($pdo, 14);
 
 <div class="container">
     <div class="admin-header">
-        <h1>Manage Organisations</h1>
-        <?php renderAdminNav('organisations'); ?>
-    </div>
+        <h1><?php echo $pageTitle; ?></h1>
+		<?php if (!isSuperAdmin()): ?>
+			<p style="color: #666; margin: 0.5rem 0 0 0;">
+				You are managing your organisation as a tenant administrator.
+			</p>
+		<?php endif; ?>
+		<?php renderAdminNav('organisations'); ?>
+	</div>
 
     <?php if (isset($success_message)): ?>
         <div class="alert alert-success"><?php echo $success_message; ?></div>
@@ -86,8 +92,8 @@ $expiring_trials = getExpiringTrials($pdo, 14);
         <div class="alert alert-error"><?php echo $error_message; ?></div>
     <?php endif; ?>
 
-    <!-- Warnings Section -->
-    <?php if (count($expiring_trials) > 0 || count($orgs_near_limit) > 0): ?>
+    <!-- Warnings Section (SUPER ADMIN ONLY) -->
+	<?php if (isSuperAdmin() && (count($expiring_trials) > 0 || count($orgs_near_limit) > 0)): ?>
     <div class="admin-section" style="background: #fff3cd; border-left: 4px solid #ffc107;">
         <h2>⚠️ Attention Required</h2>
         
@@ -125,6 +131,7 @@ $expiring_trials = getExpiringTrials($pdo, 14);
     <?php endif; ?>
 
     <!-- Create Organisation Form -->
+	<?php if (isSuperAdmin()): ?>
     <div class="admin-section">
         <h2>Create New Organisation</h2>
         <form method="POST" class="org-form">
@@ -162,10 +169,11 @@ $expiring_trials = getExpiringTrials($pdo, 14);
             <button type="submit" name="create_organisation" class="btn">Create Organisation</button>
         </form>
     </div>
+	<?php endif; ?>
 
     <!-- Organisations List -->
     <div class="admin-section">
-        <h2>All Organisations (<?php echo count($organisations); ?>)</h2>
+        <h2><?php echo isSuperAdmin() ? 'All Organisations' : 'Organisation Details'; ?> (<?php echo count($organisations); ?>)</h2>
         
         <?php if (count($organisations) > 0): ?>
             <div class="orgs-grid">
@@ -202,13 +210,15 @@ $expiring_trials = getExpiringTrials($pdo, 14);
                         </div>
                         
                         <div class="org-actions">
-                            <a href="admin_edit_organisation.php?id=<?php echo $org['id']; ?>" class="btn btn-small">Manage</a>
-                            <a href="admin_organisations_departments.php?id=<?php echo $org['id']; ?>" class="btn btn-small btn-secondary">Departments</a>
-                            <form method="POST" style="display: inline;" onsubmit="return confirm('Delete <?php echo htmlspecialchars($org['name']); ?>? This will delete all departments, teams, and users!');">
-                                <input type="hidden" name="org_id" value="<?php echo $org['id']; ?>">
-                                <button type="submit" name="delete_organisation" class="btn btn-small btn-danger">Delete</button>
-                            </form>
-                        </div>
+							<a href="admin_edit_organisation.php?id=<?php echo $org['id']; ?>" class="btn btn-small">Manage</a>
+							<a href="admin_organisations_departments.php?id=<?php echo $org['id']; ?>" class="btn btn-small btn-secondary">Departments</a>
+							<?php if (isSuperAdmin()): ?>
+							<form method="POST" style="display: inline;" onsubmit="return confirm('Delete <?php echo htmlspecialchars($org['name']); ?>? This will delete all departments, teams, and users!');">
+								<input type="hidden" name="org_id" value="<?php echo $org['id']; ?>">
+								<button type="submit" name="delete_organisation" class="btn btn-small btn-danger">Delete</button>
+							</form>
+							<?php endif; ?>
+						</div>
                     </div>
                 <?php endforeach; ?>
             </div>

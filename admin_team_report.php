@@ -24,6 +24,21 @@ if (!$team) {
     exit();
 }
 
+// Check if admin can access this team's organisation (if it belongs to a department)
+if ($team['department_id']) {
+    $stmt = $pdo->prepare("SELECT organisation_id FROM departments WHERE id = ?");
+    $stmt->execute([$team['department_id']]);
+    $dept_org_id = $stmt->fetchColumn();
+    
+    if ($dept_org_id) {
+        require_once 'includes/admin_functions.php';
+        if (!canAdminAccessOrganisation($pdo, $_SESSION['user_id'], $dept_org_id)) {
+            header('Location: admin_manage_teams.php');
+            exit();
+        }
+    }
+}
+
 // Get filter parameters
 $start_date = $_GET['start_date'] ?? null;
 $end_date = $_GET['end_date'] ?? null;

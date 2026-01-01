@@ -25,6 +25,13 @@ if (!$organisation) {
     exit();
 }
 
+// Check if admin can access this organisation
+require_once 'includes/admin_functions.php';
+if (!canAdminAccessOrganisation($pdo, $_SESSION['user_id'], $org_id)) {
+    header('Location: admin_manage_organisations.php');
+    exit();
+}
+
 $pageTitle = 'Departments: ' . $organisation['name'];
 include 'includes/header.php';
 

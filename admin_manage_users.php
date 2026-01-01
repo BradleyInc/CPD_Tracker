@@ -18,10 +18,17 @@ include 'includes/header.php';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_role'])) {
     $user_id = intval($_POST['user_id']);
     $role_id = intval($_POST['role_id']);
-    if (updateUserRole($pdo, $user_id, $role_id)) {
-        $message = '<div class="alert alert-success">User role updated successfully!</div>';
+    
+    // Check if admin can access this user
+    $target_user = getUserById($pdo, $user_id);
+    if ($target_user && (!$target_user['organisation_id'] || canAdminAccessOrganisation($pdo, $_SESSION['user_id'], $target_user['organisation_id']))) {
+        if (updateUserRole($pdo, $user_id, $role_id)) {
+            $message = '<div class="alert alert-success">User role updated successfully!</div>';
+        } else {
+            $message = '<div class="alert alert-error">Failed to update user role.</div>';
+        }
     } else {
-        $message = '<div class="alert alert-error">Failed to update user role.</div>';
+        $message = '<div class="alert alert-error">Access denied.</div>';
     }
 }
 
@@ -33,10 +40,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['archive_user'])) {
     if ($user_id === $_SESSION['user_id']) {
         $message = '<div class="alert alert-error">You cannot archive yourself!</div>';
     } else {
-        if (archiveUser($pdo, $user_id, $_SESSION['user_id'])) {
-            $message = '<div class="alert alert-success">User archived successfully!</div>';
+        // Check if admin can access this user
+        $target_user = getUserById($pdo, $user_id);
+        if ($target_user && (!$target_user['organisation_id'] || canAdminAccessOrganisation($pdo, $_SESSION['user_id'], $target_user['organisation_id']))) {
+            if (archiveUser($pdo, $user_id, $_SESSION['user_id'])) {
+                $message = '<div class="alert alert-success">User archived successfully!</div>';
+            } else {
+                $message = '<div class="alert alert-error">Failed to archive user.</div>';
+            }
         } else {
-            $message = '<div class="alert alert-error">Failed to archive user.</div>';
+            $message = '<div class="alert alert-error">Access denied.</div>';
         }
     }
 }
@@ -49,10 +62,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_user'])) {
     if ($user_id === $_SESSION['user_id']) {
         $message = '<div class="alert alert-error">You cannot delete yourself!</div>';
     } else {
-        if (deleteUser($pdo, $user_id)) {
-            $message = '<div class="alert alert-success">User deleted permanently!</div>';
+        // Check if admin can access this user
+        $target_user = getUserById($pdo, $user_id);
+        if ($target_user && (!$target_user['organisation_id'] || canAdminAccessOrganisation($pdo, $_SESSION['user_id'], $target_user['organisation_id']))) {
+            if (deleteUser($pdo, $user_id)) {
+                $message = '<div class="alert alert-success">User deleted permanently!</div>';
+            } else {
+                $message = '<div class="alert alert-error">Failed to delete user.</div>';
+            }
         } else {
-            $message = '<div class="alert alert-error">Failed to delete user.</div>';
+            $message = '<div class="alert alert-error">Access denied.</div>';
         }
     }
 }

@@ -24,6 +24,15 @@ if (!$user) {
     exit();
 }
 
+// Check if admin can access this user's organisation
+if ($user['organisation_id']) {
+    require_once 'includes/admin_functions.php';
+    if (!canAdminAccessOrganisation($pdo, $_SESSION['user_id'], $user['organisation_id'])) {
+        header('Location: admin_manage_users.php');
+        exit();
+    }
+}
+
 // Get user's CPD entries
 $stmt = $pdo->prepare("SELECT * FROM cpd_entries WHERE user_id = ? ORDER BY date_completed DESC");
 $stmt->execute([$user_id]);
