@@ -97,15 +97,21 @@ function getUserGoals($pdo, $user_id, $status = null) {
 
 /**
  * Get goals set by a manager for their team(s)
+ * UPDATED: Now includes personal goals set by users in their teams
  */
 function getManagerGoals($pdo, $manager_id) {
     $stmt = $pdo->prepare("
         SELECT 
             g.*,
             CASE 
+                WHEN g.goal_type = 'individual' AND g.set_by = g.target_user_id THEN CONCAT(u2.username, ' (Personal)')
                 WHEN g.goal_type = 'individual' THEN u2.username
                 WHEN g.goal_type = 'team' THEN t.name
             END as target_name,
+            CASE 
+                WHEN g.set_by = g.target_user_id THEN 1
+                ELSE 0
+            END as is_personal_goal,
             COUNT(DISTINCT gp.user_id) as affected_users,
             AVG(gp.progress_percentage) as avg_progress,
             DATEDIFF(g.deadline, CURDATE()) as days_remaining
@@ -113,34 +119,46 @@ function getManagerGoals($pdo, $manager_id) {
         LEFT JOIN users u2 ON g.target_user_id = u2.id
         LEFT JOIN teams t ON g.target_team_id = t.id
         LEFT JOIN goal_progress gp ON g.id = gp.goal_id
-        WHERE g.set_by = ?
-        AND g.target_team_id IN (
-            SELECT team_id FROM team_managers WHERE manager_id = ?
+        WHERE (
+            -- Goals set by this manager
+            (g.set_by = ? AND g.target_team_id IN (
+                SELECT team_id FROM team_managers WHERE manager_id = ?
+            ))
+            OR
+            -- Personal goals (set by user for themselves) where user is in manager's team
+            (g.set_by = g.target_user_id AND g.goal_type = 'individual' AND g.target_user_id IN (
+                SELECT ut.user_id 
+                FROM user_teams ut
+                JOIN team_managers tm ON ut.team_id = tm.team_id
+                WHERE tm.manager_id = ?
+            ))
         )
         GROUP BY g.id
-        ORDER BY g.deadline ASC, g.status ASC
+        ORDER BY is_personal_goal ASC, g.deadline ASC, g.status ASC
     ");
     
-    $stmt->execute([$manager_id, $manager_id]);
+    $stmt->execute([$manager_id, $manager_id, $manager_id]);
     return $stmt->fetchAll();
 }
 
 /**
- * Get all goals that a partner can see/manager
- * This includes:
- * 1. Goals set by the partner (g.set_by = ?)
- * 2. Goals assigned to departments the partner manages
- * 3. Goals assigned to teams the partner manages (directly or via department)
+ * Get all goals that a partner can see/manage
+ * UPDATED: Now includes personal goals set by users in their teams/departments
  */
 function getPartnerGoals($pdo, $partner_id) {
     $stmt = $pdo->prepare("
         SELECT 
             g.*,
             CASE 
+                WHEN g.goal_type = 'individual' AND g.set_by = g.target_user_id THEN CONCAT(u2.username, ' (Personal)')
                 WHEN g.goal_type = 'individual' THEN u2.username
                 WHEN g.goal_type = 'team' THEN t.name
                 WHEN g.goal_type = 'department' THEN d.name
             END as target_name,
+            CASE 
+                WHEN g.set_by = g.target_user_id THEN 1
+                ELSE 0
+            END as is_personal_goal,
             COUNT(DISTINCT gp.user_id) as affected_users,
             AVG(gp.progress_percentage) as avg_progress,
             DATEDIFF(g.deadline, CURDATE()) as days_remaining
@@ -167,12 +185,29 @@ function getPartnerGoals($pdo, $partner_id) {
                 JOIN department_partners dp ON d2.id = dp.department_id
                 WHERE dp.partner_id = ?
             )
+            OR
+            -- Personal goals (set by user for themselves) where user is in partner's teams/departments
+            (g.set_by = g.target_user_id AND g.goal_type = 'individual' AND g.target_user_id IN (
+                -- Users in teams directly managed by partner
+                SELECT ut.user_id 
+                FROM user_teams ut
+                JOIN team_partners tp ON ut.team_id = tp.team_id
+                WHERE tp.partner_id = ?
+                UNION
+                -- Users in teams within departments managed by partner
+                SELECT ut.user_id
+                FROM user_teams ut
+                JOIN teams t3 ON ut.team_id = t3.id
+                JOIN departments d3 ON t3.department_id = d3.id
+                JOIN department_partners dp2 ON d3.id = dp2.department_id
+                WHERE dp2.partner_id = ?
+            ))
         )
         GROUP BY g.id
-        ORDER BY g.deadline ASC, g.status ASC
+        ORDER BY is_personal_goal ASC, g.deadline ASC, g.status ASC
     ");
     
-    $stmt->execute([$partner_id, $partner_id, $partner_id, $partner_id]);
+    $stmt->execute([$partner_id, $partner_id, $partner_id, $partner_id, $partner_id, $partner_id]);
     return $stmt->fetchAll();
 }
 
@@ -207,10 +242,15 @@ function getGoalById($pdo, $goal_id) {
             g.*,
             u.username as set_by_name,
             CASE 
+                WHEN g.goal_type = 'individual' AND g.set_by = g.target_user_id THEN CONCAT(u2.username, ' (Personal)')
                 WHEN g.goal_type = 'individual' THEN u2.username
                 WHEN g.goal_type = 'team' THEN t.name
                 WHEN g.goal_type = 'department' THEN d.name
             END as target_name,
+            CASE 
+                WHEN g.set_by = g.target_user_id THEN 1
+                ELSE 0
+            END as is_personal_goal,
             DATEDIFF(g.deadline, CURDATE()) as days_remaining
         FROM cpd_goals g
         LEFT JOIN users u ON g.set_by = u.id
@@ -280,11 +320,12 @@ function getOverdueGoals($pdo, $set_by = null) {
     }
     
     if ($set_by && $is_partner) {
-        // Partner-specific logic
+        // Partner-specific logic - includes personal goals from their users
         $stmt = $pdo->prepare("
             SELECT 
                 g.*,
                 CASE 
+                    WHEN g.goal_type = 'individual' AND g.set_by = g.target_user_id THEN CONCAT(u2.username, ' (Personal)')
                     WHEN g.goal_type = 'individual' THEN u2.username
                     WHEN g.goal_type = 'team' THEN t.name
                     WHEN g.goal_type = 'department' THEN d.name
@@ -306,7 +347,7 @@ function getOverdueGoals($pdo, $set_by = null) {
                     SELECT department_id FROM department_partners WHERE partner_id = ?
                 )
                 OR 
-                -- Goals assigned to teams this partner manages (directly or via department)
+                -- Goals assigned to teams this partner manages
                 g.target_team_id IN (
                     SELECT team_id FROM team_partners WHERE partner_id = ?
                     UNION
@@ -315,20 +356,38 @@ function getOverdueGoals($pdo, $set_by = null) {
                     JOIN department_partners dp ON d2.id = dp.department_id
                     WHERE dp.partner_id = ?
                 )
+                OR
+                -- Personal goals from users they manage
+                (g.set_by = g.target_user_id AND g.goal_type = 'individual' AND g.target_user_id IN (
+                    SELECT ut.user_id FROM user_teams ut
+                    JOIN team_partners tp ON ut.team_id = tp.team_id
+                    WHERE tp.partner_id = ?
+                    UNION
+                    SELECT ut.user_id FROM user_teams ut
+                    JOIN teams t3 ON ut.team_id = t3.id
+                    JOIN departments d3 ON t3.department_id = d3.id
+                    JOIN department_partners dp2 ON d3.id = dp2.department_id
+                    WHERE dp2.partner_id = ?
+                ))
             )
             GROUP BY g.id
             ORDER BY g.deadline ASC
         ");
-        $stmt->execute([$set_by, $set_by, $set_by, $set_by]);
+        $stmt->execute([$set_by, $set_by, $set_by, $set_by, $set_by, $set_by]);
     } else {
-        // Original logic for non-partners
-        $where_clause = $set_by ? "AND g.set_by = ?" : "";
-        $params = $set_by ? [$set_by] : [];
+        // Original logic for non-partners (including managers)
+        $where_clause = $set_by ? "AND (g.set_by = ? OR (g.set_by = g.target_user_id AND g.target_user_id IN (
+            SELECT ut.user_id FROM user_teams ut
+            JOIN team_managers tm ON ut.team_id = tm.team_id
+            WHERE tm.manager_id = ?
+        )))" : "";
+        $params = $set_by ? [$set_by, $set_by] : [];
         
         $stmt = $pdo->prepare("
             SELECT 
                 g.*,
                 CASE 
+                    WHEN g.goal_type = 'individual' AND g.set_by = g.target_user_id THEN CONCAT(u2.username, ' (Personal)')
                     WHEN g.goal_type = 'individual' THEN u2.username
                     WHEN g.goal_type = 'team' THEN t.name
                     WHEN g.goal_type = 'department' THEN d.name
@@ -366,11 +425,12 @@ function getApproachingDeadlineGoals($pdo, $days = 7, $set_by = null) {
     }
     
     if ($set_by && $is_partner) {
-        // Partner-specific logic
+        // Partner-specific logic - includes personal goals
         $stmt = $pdo->prepare("
             SELECT 
                 g.*,
                 CASE 
+                    WHEN g.goal_type = 'individual' AND g.set_by = g.target_user_id THEN CONCAT(u2.username, ' (Personal)')
                     WHEN g.goal_type = 'individual' THEN u2.username
                     WHEN g.goal_type = 'team' THEN t.name
                     WHEN g.goal_type = 'department' THEN d.name
@@ -386,15 +446,12 @@ function getApproachingDeadlineGoals($pdo, $days = 7, $set_by = null) {
             AND DATEDIFF(g.deadline, CURDATE()) <= ?
             AND DATEDIFF(g.deadline, CURDATE()) >= 0
             AND (
-                -- Goals set by this partner
                 g.set_by = ?
                 OR 
-                -- Goals assigned to departments this partner manages
                 g.target_department_id IN (
                     SELECT department_id FROM department_partners WHERE partner_id = ?
                 )
                 OR 
-                -- Goals assigned to teams this partner manages (directly or via department)
                 g.target_team_id IN (
                     SELECT team_id FROM team_partners WHERE partner_id = ?
                     UNION
@@ -403,16 +460,33 @@ function getApproachingDeadlineGoals($pdo, $days = 7, $set_by = null) {
                     JOIN department_partners dp ON d2.id = dp.department_id
                     WHERE dp.partner_id = ?
                 )
+                OR
+                (g.set_by = g.target_user_id AND g.goal_type = 'individual' AND g.target_user_id IN (
+                    SELECT ut.user_id FROM user_teams ut
+                    JOIN team_partners tp ON ut.team_id = tp.team_id
+                    WHERE tp.partner_id = ?
+                    UNION
+                    SELECT ut.user_id FROM user_teams ut
+                    JOIN teams t3 ON ut.team_id = t3.id
+                    JOIN departments d3 ON t3.department_id = d3.id
+                    JOIN department_partners dp2 ON d3.id = dp2.department_id
+                    WHERE dp2.partner_id = ?
+                ))
             )
             GROUP BY g.id
             ORDER BY g.deadline ASC
         ");
-        $stmt->execute([$days, $set_by, $set_by, $set_by, $set_by]);
+        $stmt->execute([$days, $set_by, $set_by, $set_by, $set_by, $set_by, $set_by]);
     } else {
-        // Original logic for non-partners
-        $where_clause = $set_by ? "AND g.set_by = ?" : "";
+        // Original logic for non-partners (including managers)
+        $where_clause = $set_by ? "AND (g.set_by = ? OR (g.set_by = g.target_user_id AND g.target_user_id IN (
+            SELECT ut.user_id FROM user_teams ut
+            JOIN team_managers tm ON ut.team_id = tm.team_id
+            WHERE tm.manager_id = ?
+        )))" : "";
         $params = [$days];
         if ($set_by) {
+            $params[] = $set_by;
             $params[] = $set_by;
         }
         
@@ -420,6 +494,7 @@ function getApproachingDeadlineGoals($pdo, $days = 7, $set_by = null) {
             SELECT 
                 g.*,
                 CASE 
+                    WHEN g.goal_type = 'individual' AND g.set_by = g.target_user_id THEN CONCAT(u2.username, ' (Personal)')
                     WHEN g.goal_type = 'individual' THEN u2.username
                     WHEN g.goal_type = 'team' THEN t.name
                     WHEN g.goal_type = 'department' THEN d.name
@@ -555,12 +630,69 @@ function getGoalStatistics($pdo, $user_id) {
 }
 
 /**
- * Check if user can manage goal (is the one who set it)
+ * Check if user can manage goal (is the one who set it OR is a manager/partner of the user who set it)
  */
 function canManageGoal($pdo, $user_id, $goal_id) {
-    $stmt = $pdo->prepare("SELECT id FROM cpd_goals WHERE id = ? AND set_by = ?");
-    $stmt->execute([$goal_id, $user_id]);
-    return $stmt->fetch() !== false;
+    // Get goal details
+    $stmt = $pdo->prepare("
+        SELECT g.*, r.name as user_role
+        FROM cpd_goals g
+        JOIN users u ON g.set_by = u.id
+        JOIN roles r ON u.role_id = r.id
+        WHERE g.id = ?
+    ");
+    $stmt->execute([$goal_id]);
+    $goal = $stmt->fetch();
+    
+    if (!$goal) {
+        return false;
+    }
+    
+    // User who created the goal can manage it
+    if ($goal['set_by'] == $user_id) {
+        return true;
+    }
+    
+    // Get current user's role
+    $stmt = $pdo->prepare("SELECT r.name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?");
+    $stmt->execute([$user_id]);
+    $current_role = $stmt->fetchColumn();
+    
+    // If it's a personal goal (user set it for themselves)
+    if ($goal['set_by'] == $goal['target_user_id'] && $goal['goal_type'] == 'individual') {
+        // Managers can view/manage personal goals of users in their teams
+        if ($current_role === 'manager') {
+            $stmt = $pdo->prepare("
+                SELECT COUNT(*) FROM user_teams ut
+                JOIN team_managers tm ON ut.team_id = tm.team_id
+                WHERE ut.user_id = ? AND tm.manager_id = ?
+            ");
+            $stmt->execute([$goal['target_user_id'], $user_id]);
+            return $stmt->fetchColumn() > 0;
+        }
+        
+        // Partners can view/manage personal goals of users in their teams/departments
+        if ($current_role === 'partner') {
+            $stmt = $pdo->prepare("
+                SELECT COUNT(*) FROM (
+                    SELECT ut.user_id FROM user_teams ut
+                    JOIN team_partners tp ON ut.team_id = tp.team_id
+                    WHERE tp.partner_id = ?
+                    UNION
+                    SELECT ut.user_id FROM user_teams ut
+                    JOIN teams t ON ut.team_id = t.id
+                    JOIN departments d ON t.department_id = d.id
+                    JOIN department_partners dp ON d.id = dp.department_id
+                    WHERE dp.partner_id = ?
+                ) AS managed_users
+                WHERE user_id = ?
+            ");
+            $stmt->execute([$user_id, $user_id, $goal['target_user_id']]);
+            return $stmt->fetchColumn() > 0;
+        }
+    }
+    
+    return false;
 }
 
 /**
