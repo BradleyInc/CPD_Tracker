@@ -276,37 +276,131 @@ foreach ($progress_details as $participant) {
         <!-- Edit Goal -->
         <div class="admin-section">
             <h2>Edit Goal</h2>
-            <form method="POST">
-                <div class="form-group">
-                    <label>Goal Title:</label>
-                    <input type="text" name="title" value="<?php echo htmlspecialchars($goal['title']); ?>" required maxlength="200">
+            
+            <?php if ($goal['is_personal_goal']): ?>
+                <div class="edit-disabled-notice">
+                    <p><strong>🔒 Editing Disabled</strong></p>
+                    <p>Personal goals can only be edited by the user who created them. You can view progress and provide guidance, but cannot modify the goal parameters.</p>
                 </div>
                 
-                <div class="form-group">
-                    <label>Description:</label>
-                    <textarea name="description" rows="3"><?php echo htmlspecialchars($goal['description'] ?? ''); ?></textarea>
+                <!-- Display goal info in read-only mode -->
+                <div class="read-only-goal-info">
+                    <div class="info-row">
+                        <span class="info-label">Goal Title:</span>
+                        <span class="info-value"><?php echo htmlspecialchars($goal['title']); ?></span>
+                    </div>
+                    
+                    <?php if ($goal['description']): ?>
+                    <div class="info-row">
+                        <span class="info-label">Description:</span>
+                        <span class="info-value"><?php echo htmlspecialchars($goal['description']); ?></span>
+                    </div>
+                    <?php endif; ?>
+                    
+                    <div class="info-row">
+                        <span class="info-label">Target Hours:</span>
+                        <span class="info-value"><?php echo $goal['target_hours']; ?> hours</span>
+                    </div>
+                    
+                    <?php if ($goal['target_entries']): ?>
+                    <div class="info-row">
+                        <span class="info-label">Target Entries:</span>
+                        <span class="info-value"><?php echo $goal['target_entries']; ?> entries</span>
+                    </div>
+                    <?php endif; ?>
+                    
+                    <div class="info-row">
+                        <span class="info-label">Deadline:</span>
+                        <span class="info-value"><?php echo date('M d, Y', strtotime($goal['deadline'])); ?></span>
+                    </div>
                 </div>
-                
-                <div class="form-row">
+            <?php else: ?>
+                <!-- Original editable form -->
+                <form method="POST">
                     <div class="form-group">
-                        <label>Target Hours:</label>
-                        <input type="number" name="target_hours" value="<?php echo $goal['target_hours']; ?>" step="0.5" min="1" required>
+                        <label>Goal Title:</label>
+                        <input type="text" name="title" value="<?php echo htmlspecialchars($goal['title']); ?>" required maxlength="200">
                     </div>
                     
                     <div class="form-group">
-                        <label>Target Entries (Optional):</label>
-                        <input type="number" name="target_entries" value="<?php echo $goal['target_entries'] ?? ''; ?>" min="1">
+                        <label>Description:</label>
+                        <textarea name="description" rows="3"><?php echo htmlspecialchars($goal['description'] ?? ''); ?></textarea>
                     </div>
-                </div>
-                
-                <div class="form-group">
-                    <label>Deadline:</label>
-                    <input type="date" name="deadline" value="<?php echo $goal['deadline']; ?>" required>
-                </div>
-                
-                <button type="submit" name="update_goal" class="btn">Update Goal</button>
-            </form>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Target Hours:</label>
+                            <input type="number" name="target_hours" value="<?php echo $goal['target_hours']; ?>" step="0.5" min="1" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Target Entries (Optional):</label>
+                            <input type="number" name="target_entries" value="<?php echo $goal['target_entries'] ?? ''; ?>" min="1">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Deadline:</label>
+                        <input type="date" name="deadline" value="<?php echo $goal['deadline']; ?>" required>
+                    </div>
+                    
+                    <button type="submit" name="update_goal" class="btn">Update Goal</button>
+                </form>
+            <?php endif; ?>
         </div>
+
+<!-- Additional CSS -->
+<style>
+    .edit-disabled-notice {
+        background: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 1.5rem;
+        border-radius: 4px;
+        margin-bottom: 1.5rem;
+    }
+    
+    .edit-disabled-notice p {
+        margin: 0;
+    }
+    
+    .edit-disabled-notice p:first-child {
+        margin-bottom: 0.75rem;
+        color: #856404;
+        font-size: 1.1rem;
+    }
+    
+    .edit-disabled-notice p:last-child {
+        color: #856404;
+        line-height: 1.5;
+    }
+    
+    .read-only-goal-info {
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 8px;
+    }
+    
+    .info-row {
+        display: flex;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .info-row:last-child {
+        border-bottom: none;
+    }
+    
+    .info-label {
+        font-weight: 600;
+        color: #495057;
+        min-width: 150px;
+    }
+    
+    .info-value {
+        color: #212529;
+        flex: 1;
+    }
+</style>
 
         <!-- Goal Actions -->
         <div class="admin-section">
@@ -318,30 +412,80 @@ foreach ($progress_details as $participant) {
                 <p><strong>Set by:</strong> <?php echo htmlspecialchars($goal['set_by_name']); ?></p>
                 <p><strong>Type:</strong> <?php echo ucfirst($goal['goal_type']); ?></p>
                 <p><strong>Target:</strong> <?php echo htmlspecialchars($goal['target_name']); ?></p>
+                
+                <?php if ($goal['is_personal_goal']): ?>
+                    <div class="personal-goal-notice">
+                        <strong>🎯 Personal Goal</strong>
+                        <p>This goal was set by the user for themselves. As their <?php echo isManager() ? 'manager' : 'partner'; ?>, you can view progress and provide guidance, but the user owns this goal.</p>
+                    </div>
+                <?php endif; ?>
             </div>
             
             <div class="action-buttons">
                 <?php if ($goal['status'] === 'active'): ?>
-                    <form method="POST" onsubmit="return confirm('Cancel this goal? Participants will still see it but marked as cancelled.');">
-                        <button type="submit" name="cancel_goal" class="btn btn-block" style="background: #ffc107;">
-                            🚫 Cancel Goal
+                    <?php if (!$goal['is_personal_goal']): ?>
+                        <form method="POST" onsubmit="return confirm('Cancel this goal? Participants will still see it but marked as cancelled.');">
+                            <button type="submit" name="cancel_goal" class="btn btn-block" style="background: #ffc107;">
+                                🚫 Cancel Goal
+                            </button>
+                        </form>
+                    <?php else: ?>
+                        <div class="info-notice">
+                            <p><em>Personal goals can only be cancelled or deleted by the user who created them.</em></p>
+                        </div>
+                    <?php endif; ?>
+                <?php endif; ?>
+                
+                <?php if (!$goal['is_personal_goal']): ?>
+                    <form method="POST" onsubmit="return confirm('PERMANENTLY DELETE this goal? This cannot be undone!');">
+                        <button type="submit" name="delete_goal" class="btn btn-block btn-danger">
+                            🗑️ Delete Goal
                         </button>
                     </form>
                 <?php endif; ?>
-                
-                <form method="POST" onsubmit="return confirm('PERMANENTLY DELETE this goal? This cannot be undone!');">
-                    <button type="submit" name="delete_goal" class="btn btn-block btn-danger">
-                        🗑️ Delete Goal
-                    </button>
-                </form>
                 
                 <a href="manager_goals.php" class="btn btn-block btn-secondary">
                     ← Back to Goals
                 </a>
             </div>
         </div>
-    </div>
-</div>
+
+<!-- Additional CSS -->
+<style>
+    .personal-goal-notice {
+        margin-top: 1rem;
+        padding: 1rem;
+        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+        border-left: 4px solid #28a745;
+        border-radius: 4px;
+    }
+    
+    .personal-goal-notice strong {
+        display: block;
+        color: #155724;
+        margin-bottom: 0.5rem;
+        font-size: 1.1rem;
+    }
+    
+    .personal-goal-notice p {
+        color: #155724;
+        margin: 0;
+        line-height: 1.5;
+    }
+    
+    .info-notice {
+        padding: 1rem;
+        background: #e7f3ff;
+        border-left: 4px solid #007cba;
+        border-radius: 4px;
+        margin-bottom: 1rem;
+    }
+    
+    .info-notice p {
+        margin: 0;
+        color: #004085;
+    }
+</style>
 
 <style>
     .goal-detail-header {

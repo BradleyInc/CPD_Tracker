@@ -296,22 +296,32 @@ $completed_goals = array_filter($all_goals, function($g) { return $g['status'] =
         </div>
     </div>
 
-    <!-- Active Goals -->
+<!-- Active Goals -->
     <div class="admin-section">
         <h2>Active Goals (<?php echo count($active_goals); ?>)</h2>
         
         <?php if (count($active_goals) > 0): ?>
             <div class="goals-grid">
                 <?php foreach ($active_goals as $goal): ?>
-                    <div class="goal-card <?php echo $goal['days_remaining'] <= 7 && $goal['days_remaining'] > 0 ? 'warning' : ''; ?>">
+                    <div class="goal-card <?php echo $goal['days_remaining'] <= 7 && $goal['days_remaining'] > 0 ? 'warning' : ''; ?> <?php echo $goal['is_personal_goal'] ? 'personal-goal' : ''; ?>">
                         <div class="goal-header">
-                            <h3><?php echo htmlspecialchars($goal['title']); ?></h3>
+                            <h3>
+                                <?php if ($goal['is_personal_goal']): ?>
+                                    <span class="personal-indicator" title="User set this goal for themselves">🎯</span>
+                                <?php endif; ?>
+                                <?php echo htmlspecialchars($goal['title']); ?>
+                            </h3>
                             <span class="goal-type-badge <?php echo $goal['goal_type']; ?>">
                                 <?php echo ucfirst($goal['goal_type']); ?>
                             </span>
                         </div>
                         
-                        <p class="goal-target"><strong>Target:</strong> <?php echo htmlspecialchars($goal['target_name']); ?></p>
+                        <p class="goal-target">
+                            <strong>Target:</strong> <?php echo htmlspecialchars($goal['target_name']); ?>
+                            <?php if ($goal['is_personal_goal']): ?>
+                                <span class="personal-badge">Self-Set</span>
+                            <?php endif; ?>
+                        </p>
                         
                         <div class="goal-stats">
                             <div class="stat">
@@ -329,7 +339,8 @@ $completed_goals = array_filter($all_goals, function($g) { return $g['status'] =
                         </div>
                         
                         <div class="progress-bar-container">
-                            <div class="progress-bar-fill" style="width: <?php echo min($goal['avg_progress'] ?? 0, 100); ?>%"></div>
+                            <div class="progress-bar-fill <?php echo $goal['is_personal_goal'] ? 'personal' : ''; ?>" 
+                                 style="width: <?php echo min($goal['avg_progress'] ?? 0, 100); ?>%"></div>
                         </div>
                         
                         <div class="goal-footer">
@@ -350,21 +361,60 @@ $completed_goals = array_filter($all_goals, function($g) { return $g['status'] =
         <?php endif; ?>
     </div>
 
+<!-- Additional CSS for the goals display -->
+<style>
+    .goal-card.personal-goal {
+        border-left: 4px solid #28a745;
+        background: linear-gradient(to bottom, #f0fff4 0%, #fff 50%);
+    }
+    
+    .personal-indicator {
+        display: inline-block;
+        margin-right: 0.5rem;
+        font-size: 1.2rem;
+    }
+    
+    .personal-badge {
+        display: inline-block;
+        padding: 0.25rem 0.6rem;
+        background: #d4edda;
+        color: #155724;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-left: 0.5rem;
+    }
+    
+    .progress-bar-fill.personal {
+        background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
+    }
+</style>
+
     <!-- Overdue Goals -->
     <?php if (count($overdue_goals) > 0): ?>
     <div id="overdue-section" class="admin-section" style="border-left: 4px solid #dc3545;">
         <h2>🔴 Overdue Goals (<?php echo count($overdue_goals); ?>)</h2>
         <div class="goals-grid">
             <?php foreach ($overdue_goals as $goal): ?>
-                <div class="goal-card overdue">
+                <div class="goal-card overdue <?php echo $goal['is_personal_goal'] ? 'personal-goal-overdue' : ''; ?>">
                     <div class="goal-header">
-                        <h3><?php echo htmlspecialchars($goal['title']); ?></h3>
+                        <h3>
+                            <?php if ($goal['is_personal_goal']): ?>
+                                <span class="personal-indicator" title="User set this goal for themselves">🎯</span>
+                            <?php endif; ?>
+                            <?php echo htmlspecialchars($goal['title']); ?>
+                        </h3>
                         <span class="goal-type-badge <?php echo $goal['goal_type']; ?>">
                             <?php echo ucfirst($goal['goal_type']); ?>
                         </span>
                     </div>
                     
-                    <p class="goal-target"><strong>Target:</strong> <?php echo htmlspecialchars($goal['target_name']); ?></p>
+                    <p class="goal-target">
+                        <strong>Target:</strong> <?php echo htmlspecialchars($goal['target_name']); ?>
+                        <?php if ($goal['is_personal_goal']): ?>
+                            <span class="personal-badge">Self-Set</span>
+                        <?php endif; ?>
+                    </p>
                     
                     <div class="goal-stats">
                         <div class="stat">
@@ -394,7 +444,13 @@ $completed_goals = array_filter($all_goals, function($g) { return $g['status'] =
         </div>
     </div>
     <?php endif; ?>
-</div>
+
+<!-- Additional CSS for personal overdue goals -->
+<style>
+    .goal-card.personal-goal-overdue {
+        border-left: 4px solid #856404;
+    }
+</style>
 
 <style>
     .quick-create-tabs {
