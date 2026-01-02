@@ -395,9 +395,16 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
                         </div>
                         
                         <div class="goal-actions">
-                            <button type="button" class="btn btn-small" onclick="openEditModal(<?php echo htmlspecialchars(json_encode($goal)); ?>)">
-                                ✏️ Edit
-                            </button>
+                            <button type="button" class="btn btn-small" 
+									data-goal-id="<?php echo htmlspecialchars($goal['id']); ?>"
+									data-goal-title="<?php echo htmlspecialchars($goal['title']); ?>"
+									data-goal-description="<?php echo htmlspecialchars($goal['description'] ?? ''); ?>"
+									data-goal-hours="<?php echo htmlspecialchars($goal['target_hours']); ?>"
+									data-goal-entries="<?php echo htmlspecialchars($goal['target_entries'] ?? ''); ?>"
+									data-goal-deadline="<?php echo htmlspecialchars($goal['deadline']); ?>"
+									onclick="openEditGoalModalFromData(this); return false;">
+								✏️ Edit
+							</button>
                             <button type="button" class="btn btn-small btn-danger" onclick="confirmDeleteGoal(<?php echo $goal['id']; ?>)">
                                 🗑️ Delete
                             </button>
@@ -684,7 +691,7 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
 <!-- Edit Personal Goal Modal -->
 <div id="editGoalModal" class="goal-modal" style="display: none;">
     <div class="goal-modal-content">
-        <span class="goal-modal-close" onclick="closeEditModal()">&times;</span>
+        <span class="goal-modal-close" onclick="closeEditGoalModal()">&times;</span>
         <h2>Edit Personal Goal</h2>
         
         <form method="POST" action="" class="goal-form">
@@ -727,9 +734,9 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
                 <button type="submit" name="update_personal_goal" class="btn">
                     💾 Update Goal
                 </button>
-                <button type="button" class="btn btn-secondary" onclick="closeEditModal()">
-                    Cancel
-                </button>
+                <button type="button" class="btn btn-secondary" onclick="closeEditGoalModal()">
+					Cancel
+				</button>
             </div>
         </form>
     </div>
@@ -1239,19 +1246,41 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
 </style>
 
 <script>
-function openEditModal(goal) {
-    document.getElementById('edit_goal_id').value = goal.id;
-    document.getElementById('edit_goal_title').value = goal.title;
-    document.getElementById('edit_goal_description').value = goal.description || '';
-    document.getElementById('edit_target_hours').value = goal.target_hours;
-    document.getElementById('edit_target_entries').value = goal.target_entries || '';
-    document.getElementById('edit_deadline').value = goal.deadline;
+// Goal modal functions - renamed to avoid conflicts with CPD entry modal
+function openEditGoalModal(goal) {
+    console.log('openEditGoalModal called with:', goal);
     
-    document.getElementById('editGoalModal').style.display = 'block';
-    document.body.style.overflow = 'hidden';
+    try {
+        document.getElementById('edit_goal_id').value = goal.id;
+        document.getElementById('edit_goal_title').value = goal.title;
+        document.getElementById('edit_goal_description').value = goal.description || '';
+        document.getElementById('edit_target_hours').value = goal.target_hours;
+        document.getElementById('edit_target_entries').value = goal.target_entries || '';
+        document.getElementById('edit_deadline').value = goal.deadline;
+        
+        document.getElementById('editGoalModal').style.display = 'block';
+        document.body.style.overflow = 'hidden';
+        console.log('Goal modal opened successfully');
+    } catch (error) {
+        console.error('Error opening goal modal:', error);
+    }
 }
 
-function closeEditModal() {
+function openEditGoalModalFromData(button) {
+    const goal = {
+        id: button.getAttribute('data-goal-id'),
+        title: button.getAttribute('data-goal-title'),
+        description: button.getAttribute('data-goal-description'),
+        target_hours: button.getAttribute('data-goal-hours'),
+        target_entries: button.getAttribute('data-goal-entries'),
+        deadline: button.getAttribute('data-goal-deadline')
+    };
+    
+    console.log('Goal data from button:', goal);
+    openEditGoalModal(goal);
+}
+
+function closeEditGoalModal() {
     document.getElementById('editGoalModal').style.display = 'none';
     document.body.style.overflow = 'auto';
 }
@@ -1273,7 +1302,7 @@ window.onclick = function(event) {
     const deleteModal = document.getElementById('deleteGoalModal');
     
     if (event.target === editModal) {
-        closeEditModal();
+        closeEditGoalModal();
     }
     if (event.target === deleteModal) {
         closeDeleteModal();
@@ -1281,23 +1310,36 @@ window.onclick = function(event) {
 }
 
 // Toggle goal form
-document.getElementById('toggleGoalForm').addEventListener('click', function() {
-    const container = document.getElementById('goalFormContainer');
-    const toggleText = document.getElementById('toggleText');
-    
-    if (container.style.display === 'none') {
-        container.style.display = 'block';
-        toggleText.textContent = 'Hide Form';
-    } else {
-        container.style.display = 'none';
-        toggleText.textContent = 'Show Form';
+document.addEventListener('DOMContentLoaded', function() {
+    const toggleButton = document.getElementById('toggleGoalForm');
+    if (toggleButton) {
+        toggleButton.addEventListener('click', function() {
+            const container = document.getElementById('goalFormContainer');
+            const toggleText = document.getElementById('toggleText');
+            
+            if (container && toggleText) {
+                if (container.style.display === 'none' || container.style.display === '') {
+                    container.style.display = 'block';
+                    toggleText.textContent = 'Hide Form';
+                } else {
+                    container.style.display = 'none';
+                    toggleText.textContent = 'Show Form';
+                }
+            }
+        });
     }
 });
 
 // If there are errors, show the form
 <?php if (!empty($error_messages)): ?>
-document.getElementById('goalFormContainer').style.display = 'block';
-document.getElementById('toggleText').textContent = 'Hide Form';
+document.addEventListener('DOMContentLoaded', function() {
+    const container = document.getElementById('goalFormContainer');
+    const toggleText = document.getElementById('toggleText');
+    if (container && toggleText) {
+        container.style.display = 'block';
+        toggleText.textContent = 'Hide Form';
+    }
+});
 <?php endif; ?>
 </script>
 
