@@ -37,23 +37,34 @@ foreach ($managed_teams as $team) {
     </div>
 
     <div class="stats-grid">
-        <div class="stat-card">
-            <h3>Teams Managed</h3>
-            <p class="stat-number"><?php echo count($managed_teams); ?></p>
-        </div>
-        <div class="stat-card">
-            <h3>Total Team Members</h3>
-            <p class="stat-number"><?php echo $total_team_members; ?></p>
-        </div>
-        <div class="stat-card">
-            <h3>Total CPD Entries</h3>
-            <p class="stat-number"><?php echo $total_cpd_entries; ?></p>
-        </div>
-        <div class="stat-card">
-            <h3>Total CPD Hours</h3>
-            <p class="stat-number"><?php echo round($total_cpd_hours, 1); ?></p>
-        </div>
-    </div>
+		<div class="stat-card">
+			<h3>Teams Managed</h3>
+			<p class="stat-number"><?php echo count($managed_teams); ?></p>
+		</div>
+		<div class="stat-card">
+			<h3>Total Team Members</h3>
+			<p class="stat-number"><?php echo $total_team_members; ?></p>
+		</div>
+		<div class="stat-card">
+			<h3>Total CPD Entries</h3>
+			<p class="stat-number"><?php echo $total_cpd_entries; ?></p>
+		</div>
+		<div class="stat-card">
+			<h3>Total CPD Hours</h3>
+			<p class="stat-number"><?php echo round($total_cpd_hours, 1); ?></p>
+		</div>
+		<?php 
+		require_once 'includes/review_functions.php';
+		$pending_reviews = getPendingReviewCount($pdo, $_SESSION['user_id']);
+		if ($pending_reviews > 0):
+		?>
+		<div class="stat-card" style="background: #fff3cd; border-left-color: #ffc107;">
+			<h3>⏳ Pending Reviews</h3>
+			<p class="stat-number" style="color: #856404;"><?php echo $pending_reviews; ?></p>
+			<small>Entries awaiting your review</small>
+		</div>
+		<?php endif; ?>
+	</div>
 
     <div class="admin-section">
         <h2>My Teams</h2>

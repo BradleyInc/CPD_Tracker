@@ -259,9 +259,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Get user's CPD entries with prepared statement
+// Get user's CPD entries with review information - UPDATED QUERY
 try {
-    $stmt = $pdo->prepare("SELECT * FROM cpd_entries WHERE user_id = ? ORDER BY date_completed DESC");
+    $stmt = $pdo->prepare("
+        SELECT ce.*, 
+               u.username as reviewed_by_username,
+               r.name as reviewer_role
+        FROM cpd_entries ce
+        LEFT JOIN users u ON ce.reviewed_by = u.id
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE ce.user_id = ? 
+        ORDER BY ce.date_completed DESC
+    ");
     $stmt->execute([$_SESSION['user_id']]);
     $entries = $stmt->fetchAll();
     debugLog("Loaded " . count($entries) . " entries for user");
@@ -355,6 +364,51 @@ debugLog("Total hours: $total_hours");
         .import-section h2 {
             color: #17a2b8;
             margin-top: 0;
+        }
+        
+        /* Review status styles */
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+
+        .status-approved {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .review-info {
+            background: #e7f3ff;
+            padding: 0.75rem;
+            margin-top: 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            border-left: 3px solid #007cba;
+        }
+
+        .review-info strong {
+            color: #007cba;
+        }
+
+        .review-comments {
+            margin-top: 0.5rem;
+            font-style: italic;
+            color: #333;
+        }
+
+        .pending-review-row {
+            background: #fffef5;
         }
     </style>
 </head>
@@ -465,12 +519,36 @@ debugLog("Total hours: $total_hours");
                     </thead>
                     <tbody>
                         <?php foreach ($entries as $entry): ?>
-                        <tr data-entry-id="<?php echo $entry['id']; ?>" data-description="<?php echo htmlspecialchars($entry['description']); ?>">
+                        <tr data-entry-id="<?php echo $entry['id']; ?>" 
+                            data-description="<?php echo htmlspecialchars($entry['description']); ?>"
+                            class="<?php echo $entry['review_status'] === 'pending' ? 'pending-review-row' : ''; ?>">
                             <td>
                                 <input type="checkbox" name="selected_entries[]" value="<?php echo $entry['id']; ?>" class="entry-checkbox">
                             </td>
                             <td><?php echo htmlspecialchars($entry['date_completed']); ?></td>
-                            <td><?php echo htmlspecialchars($entry['title']); ?></td>
+                            <td>
+                                <div>
+                                    <?php echo htmlspecialchars($entry['title']); ?>
+                                    <?php if ($entry['review_status'] === 'approved'): ?>
+                                        <span class="status-badge status-approved" title="Approved by <?php echo htmlspecialchars($entry['reviewed_by_username'] ?? 'Unknown'); ?>">
+                                            ✓ Approved
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="status-badge status-pending">⏳ Pending Review</span>
+                                    <?php endif; ?>
+                                </div>
+                                <?php if ($entry['review_comments']): ?>
+                                <div class="review-info">
+                                    <strong>Review from <?php echo htmlspecialchars($entry['reviewed_by_username']); ?>:</strong>
+                                    <div class="review-comments"><?php echo nl2br(htmlspecialchars($entry['review_comments'])); ?></div>
+                                    <?php if ($entry['reviewed_at']): ?>
+                                    <div style="font-size: 0.8rem; color: #666; margin-top: 0.25rem;">
+                                        <?php echo date('M d, Y g:i A', strtotime($entry['reviewed_at'])); ?>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                                <?php endif; ?>
+                            </td>
                             <td><?php echo htmlspecialchars($entry['category']); ?></td>
                             <td><?php echo htmlspecialchars($entry['hours']); ?> hours</td>
                             <td>
