@@ -651,3 +651,47 @@ input[type="checkbox"] {
 .filter-form .form-group {
     margin-bottom: 0;
 }
+
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 0.5rem;
+}
+
+.status-approved {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.status-pending {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.review-info {
+    background: #e7f3ff;
+    padding: 0.75rem;
+    margin-top: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    border-left: 3px solid #007cba;
+}
+
+.review-info strong {
+    color: #007cba;
+}
+
+.review-comments {
+    margin-top: 0.5rem;
+    font-style: italic;
+    color: #333;
+}
+
+.pending-review-row {
+    background: #fffef5;
+}
