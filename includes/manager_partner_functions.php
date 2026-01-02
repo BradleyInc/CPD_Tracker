@@ -337,26 +337,71 @@ function canUserAccessTeamData($pdo, $user_id, $team_id) {
 }
 
 /**
- * Render manager navigation
+ * Render manager navigation with review notification
  */
 function renderManagerNav($team_id, $current_page = '') {
+    global $pdo;
+    require_once 'review_functions.php';
+    
+    $pending_count = getPendingReviewCount($pdo, $_SESSION['user_id']);
     ?>
     <nav class="admin-nav">
+        <a href="manager_dashboard.php" <?php echo $current_page === 'dashboard' ? 'class="active"' : ''; ?>>
+            Dashboard
+            <?php if ($pending_count > 0): ?>
+                <span class="notification-badge"><?php echo $pending_count; ?></span>
+            <?php endif; ?>
+        </a>
         <a href="manager_goal_details.php">Team Goal Management</a>
+        <a href="dashboard.php">My CPD</a>
     </nav>
+    <style>
+    .notification-badge {
+        display: inline-block;
+        background: #dc3545;
+        color: white;
+        border-radius: 10px;
+        padding: 0.2rem 0.5rem;
+        font-size: 0.75rem;
+        font-weight: bold;
+        margin-left: 0.5rem;
+        vertical-align: middle;
+    }
+    </style>
     <?php
 }
 
 /**
- * Render partner navigation
+ * Render partner navigation with review notification
  */
 function renderPartnerNav($current_page = '') {
+    global $pdo;
+    require_once 'review_functions.php';
+    
+    $pending_count = getPendingReviewCount($pdo, $_SESSION['user_id']);
     ?>
     <nav class="admin-nav">
-        <a href="partner_dashboard.php" <?php echo $current_page === 'dashboard' ? 'class="active"' : ''; ?>>My Teams</a>
-		<a href="manager_goal_details.php">Team Goal Management</a>
+        <a href="partner_dashboard.php" <?php echo $current_page === 'dashboard' ? 'class="active"' : ''; ?>>
+            My Teams
+            <?php if ($pending_count > 0): ?>
+                <span class="notification-badge"><?php echo $pending_count; ?></span>
+            <?php endif; ?>
+        </a>
+        <a href="manager_goal_details.php">Team Goal Management</a>
         <a href="dashboard.php">My CPD</a>
     </nav>
+    <style>
+    .notification-badge {
+        display: inline-block;
+        background: #dc3545;
+        color: white;
+        border-radius: 10px;
+        padding: 0.2rem 0.5rem;
+        font-size: 0.75rem;
+        font-weight: bold;
+        margin-left: 0.5rem;
+        vertical-align: middle;
+    }
+    </style>
     <?php
 }
-?>
