@@ -96,6 +96,7 @@ include 'includes/header.php';
                         <th>Category</th>
                         <th>Hours</th>
                         <th>Description</th>
+                        <th>Supporting Document</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -111,6 +112,37 @@ include 'includes/header.php';
                             echo strlen($desc) > 100 ? substr($desc, 0, 100) . '...' : $desc;
                             ?>
                         </td>
+                        <td style="text-align: center;">
+                            <?php if (!empty($entry['supporting_docs'])): ?>
+                                <?php
+                                // Determine file type for icon
+                                $file_ext = strtolower(pathinfo($entry['supporting_docs'], PATHINFO_EXTENSION));
+                                $icon_class = 'fa-file';
+                                $file_types = [
+                                    'pdf' => 'fa-file-pdf',
+                                    'jpg' => 'fa-file-image',
+                                    'jpeg' => 'fa-file-image',
+                                    'png' => 'fa-file-image',
+                                    'doc' => 'fa-file-word',
+                                    'docx' => 'fa-file-word',
+                                    'csv' => 'fa-file-csv'
+                                ];
+                                if (isset($file_types[$file_ext])) {
+                                    $icon_class = $file_types[$file_ext];
+                                }
+                                ?>
+                                <a href="download.php?file=<?php echo urlencode($entry['supporting_docs']); ?>" 
+                                   class="btn btn-sm btn-outline-primary" 
+                                   target="_blank" 
+                                   title="View supporting document">
+                                    <i class="fas <?php echo $icon_class; ?>"></i> View Document
+                                </a>
+                            <?php else: ?>
+                                <span class="text-muted" title="No supporting document attached">
+                                    <i class="fas fa-times-circle"></i> No Document
+                                </span>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -125,5 +157,36 @@ include 'includes/header.php';
            class="btn btn-secondary">Back to Team Overview</a>
     </div>
 </div>
+
+<style>
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+.text-muted {
+    color: #6c757d !important;
+}
+
+.fa-times-circle {
+    color: #dc3545;
+}
+
+.fa-file-pdf {
+    color: #dc3545;
+}
+
+.fa-file-image {
+    color: #28a745;
+}
+
+.fa-file-word {
+    color: #007bff;
+}
+
+.fa-file-csv {
+    color: #17a2b8;
+}
+</style>
 
 <?php include 'includes/footer.php'; ?>

@@ -630,8 +630,8 @@ debugLog("Total hours: $total_hours");
                         </label>
                     </div>
                     <div class="file-upload">
-                        <input type="file" id="edit_supporting_doc" name="edit_supporting_doc" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.ics">
-                        <small>Max 10MB - PDF, JPEG, PNG, Word docs, or .ics calendar files</small>
+                        <input type="file" id="edit_supporting_doc" name="edit_supporting_doc" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
+                        <small>Max 10MB - PDF, JPEG, PNG or Word doc files</small>
                     </div>
                 </div>
                 <div class="modal-actions">
