@@ -100,6 +100,11 @@ $stmt = $pdo->prepare($query);
 $stmt->execute($params);
 $cpd_entries = $stmt->fetchAll();
 
+// Get documents for each entry
+foreach ($cpd_entries as &$entry) {
+    $entry['documents'] = getCPDDocuments($pdo, $entry['id']);
+}
+
 // Calculate totals and stats
 $total_hours = 0;
 $approved_count = 0;
@@ -178,6 +183,8 @@ include 'includes/header.php';
                             <th>Title</th>
                             <th>Category</th>
                             <th>Hours</th>
+							<th>Points</th>
+                            <th>Documents</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
@@ -185,42 +192,66 @@ include 'includes/header.php';
                     <tbody>
                         <?php foreach ($cpd_entries as $entry): ?>
                         <tr data-entry-id="<?php echo $entry['id']; ?>" class="<?php echo $entry['review_status'] === 'pending' ? 'pending-row' : ''; ?>">
-                            <?php if ($pending_count > 0): ?>
-                            <td>
-                                <?php if ($entry['review_status'] === 'pending'): ?>
-                                <input type="checkbox" name="selected_entries[]" value="<?php echo $entry['id']; ?>" class="entry-checkbox">
-                                <?php endif; ?>
-                            </td>
-                            <?php endif; ?>
-                            <td><?php echo htmlspecialchars($entry['date_completed']); ?></td>
-                            <td><?php echo htmlspecialchars($entry['title']); ?></td>
-                            <td><?php echo htmlspecialchars($entry['category']); ?></td>
-                            <td><?php echo htmlspecialchars($entry['hours']); ?> hours</td>
-                            <td>
-                                <?php if ($entry['review_status'] === 'approved'): ?>
-                                    <span class="status-badge status-approved">✓ Approved</span>
-                                <?php else: ?>
-                                    <span class="status-badge status-pending">⏳ Pending Review</span>
-                                <?php endif; ?>
-                            </td>
-                            <td>
-                                <button type="button" 
-                                        class="btn btn-small view-details-btn"
-                                        data-entry-id="<?php echo $entry['id']; ?>"
-                                        data-title="<?php echo htmlspecialchars($entry['title']); ?>"
-                                        data-description="<?php echo htmlspecialchars($entry['description']); ?>"
-                                        data-category="<?php echo htmlspecialchars($entry['category']); ?>"
-                                        data-hours="<?php echo $entry['hours']; ?>"
-                                        data-date="<?php echo $entry['date_completed']; ?>"
-                                        data-status="<?php echo $entry['review_status']; ?>"
-                                        data-comments="<?php echo htmlspecialchars($entry['review_comments'] ?? ''); ?>"
-                                        data-reviewed-by="<?php echo htmlspecialchars($entry['reviewed_by_username'] ?? ''); ?>"
-                                        data-reviewed-at="<?php echo $entry['reviewed_at'] ? date('M d, Y g:i A', strtotime($entry['reviewed_at'])) : ''; ?>"
-                                        data-document-file="<?php echo $entry['supporting_docs'] ? urlencode($entry['supporting_docs']) : ''; ?>">
-                                    View & Review
-                                </button>
-                            </td>
-                        </tr>
+							<?php if ($pending_count > 0): ?>
+							<td>
+								<?php if ($entry['review_status'] === 'pending'): ?>
+								<input type="checkbox" name="selected_entries[]" value="<?php echo $entry['id']; ?>" class="entry-checkbox">
+								<?php endif; ?>
+							</td>
+							<?php endif; ?>
+							<td><?php echo htmlspecialchars($entry['date_completed']); ?></td>
+							<td><?php echo htmlspecialchars($entry['title']); ?></td>
+							<td><?php echo htmlspecialchars($entry['category']); ?></td>
+							<td><?php echo htmlspecialchars($entry['hours']); ?> hours</td>
+							<td>
+								<?php if ($entry['points'] !== null && $entry['points'] > 0): ?>
+									<?php echo number_format($entry['points'], 2); ?> pts
+								<?php else: ?>
+									-
+								<?php endif; ?>
+							</td>
+							<td>
+								<?php if (!empty($entry['documents'])): ?>
+									<div class="document-list-compact">
+										<?php foreach ($entry['documents'] as $doc): ?>
+											<a href="download.php?file=<?php echo urlencode($doc['filename']); ?>" 
+											   target="_blank" 
+											   class="doc-link-compact"
+											   title="<?php echo htmlspecialchars($doc['original_filename']); ?>">
+												📄 <?php echo htmlspecialchars(strlen($doc['original_filename']) > 15 ? substr($doc['original_filename'], 0, 15) . '...' : $doc['original_filename']); ?>
+											</a>
+										<?php endforeach; ?>
+									</div>
+								<?php else: ?>
+									<span style="color: #999;">No documents</span>
+								<?php endif; ?>
+							</td>
+							<td>
+								<?php if ($entry['review_status'] === 'approved'): ?>
+									<span class="status-badge status-approved">✓ Approved</span>
+								<?php else: ?>
+									<span class="status-badge status-pending">⏳ Pending Review</span>
+								<?php endif; ?>
+							</td>
+							<td>
+								<button type="button" 
+										class="btn btn-small view-details-btn"
+										data-entry-id="<?php echo $entry['id']; ?>"
+										data-title="<?php echo htmlspecialchars($entry['title']); ?>"
+										data-description="<?php echo htmlspecialchars($entry['description']); ?>"
+										data-category="<?php echo htmlspecialchars($entry['category']); ?>"
+										data-hours="<?php echo $entry['hours']; ?>"
+										data-points="<?php echo $entry['points'] ?? ''; ?>"
+										data-date="<?php echo $entry['date_completed']; ?>"
+										data-status="<?php echo $entry['review_status']; ?>"
+										data-comments="<?php echo htmlspecialchars($entry['review_comments'] ?? ''); ?>"
+										data-reviewed-by="<?php echo htmlspecialchars($entry['reviewed_by_username'] ?? ''); ?>"
+										data-reviewed-at="<?php echo $entry['reviewed_at'] ? date('M d, Y g:i A', strtotime($entry['reviewed_at'])) : ''; ?>"
+										data-documents='<?php echo addslashes(json_encode($entry['documents'])); ?>'>
+									Review
+								</button>
+							</td>
+						</tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
@@ -243,22 +274,25 @@ include 'includes/header.php';
         <h2>CPD Entry Details & Review</h2>
         
         <div id="entryDetails" style="background: #f8f9fa; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
-            <h3 id="modalTitle"></h3>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0;">
-                <div><strong>Date:</strong> <span id="modalDate"></span></div>
-                <div><strong>Category:</strong> <span id="modalCategory"></span></div>
-                <div><strong>Hours:</strong> <span id="modalHours"></span></div>
-                <div><strong>Current Status:</strong> <span id="modalCurrentStatus"></span></div>
-            </div>
-            <div style="margin-top: 1rem;">
-                <strong>Description:</strong>
-                <p id="modalDescription" style="margin: 0.5rem 0;"></p>
-            </div>
-            <div id="documentSection" style="margin-top: 1rem; display: none;">
-                <strong>Supporting Document:</strong>
-                <a id="documentLink" href="#" target="_blank" class="btn btn-small" style="margin-left: 0.5rem;">View Document</a>
-            </div>
-        </div>
+			<h3 id="modalTitle"></h3>
+			<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin: 1rem 0;">
+				<div><strong>Date:</strong> <span id="modalDate"></span></div>
+				<div><strong>Category:</strong> <span id="modalCategory"></span></div>
+				<div><strong>Hours:</strong> <span id="modalHours"></span></div>
+				<div><strong>Points:</strong> <span id="modalPoints"></span></div>  <!-- ADD THIS -->
+				<div><strong>Current Status:</strong> <span id="modalCurrentStatus"></span></div>
+			</div>
+			<div style="margin-top: 1rem;">
+				<strong>Description:</strong>
+				<p id="modalDescription" style="margin: 0.5rem 0;"></p>
+			</div>
+			<div id="documentSection" style="margin-top: 1rem; display: none;">
+				<strong>Supporting Documents:</strong>
+				<div id="documentList" style="margin-top: 0.5rem;">
+					<!-- Documents will be populated by JavaScript -->
+				</div>
+			</div>
+		</div>
 
         <div id="existingReview" style="background: #e7f3ff; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem; display: none;">
             <h4 style="margin-top: 0;">Previous Review</h4>
@@ -319,6 +353,74 @@ include 'includes/header.php';
     background: #fffef5;
 }
 
+/* Compact document list in table */
+.document-list-compact {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.doc-link-compact {
+    color: #007cba;
+    text-decoration: none;
+    font-size: 0.875rem;
+    display: inline-block;
+}
+
+.doc-link-compact:hover {
+    text-decoration: underline;
+}
+
+/* Document list in modal */
+#documentList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.modal-document-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 4px;
+    border: 1px solid #e1e5e9;
+}
+
+.modal-document-icon {
+    font-size: 1.5rem;
+}
+
+.modal-document-info {
+    flex: 1;
+}
+
+.modal-document-name {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 0.25rem;
+}
+
+.modal-document-size {
+    font-size: 0.875rem;
+    color: #666;
+}
+
+.modal-document-link {
+    padding: 0.5rem 1rem;
+    background: #007cba;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.modal-document-link:hover {
+    background: #005a87;
+}
+
 .modal {
     display: none;
     position: fixed;
@@ -337,7 +439,7 @@ include 'includes/header.php';
     padding: 2rem;
     border-radius: 8px;
     width: 90%;
-    max-width: 600px;
+    max-width: 700px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.2);
     position: relative;
 }
@@ -374,7 +476,16 @@ include 'includes/header.php';
 </style>
 
 <script>
-// Modal functionality - ensure all elements exist before accessing them
+// Helper function to format file sizes
+function formatFileSize(bytes) {
+    if (bytes === 0 || bytes === '0' || !bytes) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+}
+
+// Modal functionality
 document.addEventListener('DOMContentLoaded', function() {
     const modal = document.getElementById('reviewModal');
     if (!modal) {
@@ -387,78 +498,113 @@ document.addEventListener('DOMContentLoaded', function() {
     const viewDetailsBtns = document.querySelectorAll('.view-details-btn');
 
     viewDetailsBtns.forEach(btn => {
-        btn.addEventListener('click', function() {
-            const entryId = this.dataset.entryId;
-            const title = this.dataset.title;
-            const description = this.dataset.description;
-            const category = this.dataset.category;
-            const hours = this.dataset.hours;
-            const date = this.dataset.date;
-            const status = this.dataset.status;
-            const comments = this.dataset.comments;
-            const reviewedBy = this.dataset.reviewedBy;
-            const reviewedAt = this.dataset.reviewedAt;
-            const documentFile = this.dataset.documentFile; // Changed from 'document' to avoid conflict
-            
-            // Populate modal - use window.document to be explicit
-            const modalTitle = window.document.getElementById('modalTitle');
-            const modalDate = window.document.getElementById('modalDate');
-            const modalCategory = window.document.getElementById('modalCategory');
-            const modalHours = window.document.getElementById('modalHours');
-            const modalDescription = window.document.getElementById('modalDescription');
-            const modalCurrentStatus = window.document.getElementById('modalCurrentStatus');
-            const documentSection = window.document.getElementById('documentSection');
-            const documentLink = window.document.getElementById('documentLink');
-            const existingReview = window.document.getElementById('existingReview');
-            const reviewedByElement = window.document.getElementById('reviewedBy');
-            const reviewedAtElement = window.document.getElementById('reviewedAt');
-            const existingComments = window.document.getElementById('existingComments');
-            const reviewEntryId = window.document.getElementById('review_entry_id');
-            const reviewStatus = window.document.getElementById('review_status');
-            const reviewComments = window.document.getElementById('review_comments');
-            
-            if (modalTitle) modalTitle.textContent = title;
-            if (modalDate) modalDate.textContent = date;
-            if (modalCategory) modalCategory.textContent = category;
-            if (modalHours) modalHours.textContent = hours + ' hours';
-            if (modalDescription) modalDescription.textContent = description || 'No description provided';
-            
-            // Status badge
-            if (modalCurrentStatus) {
-                const statusBadge = status === 'approved' 
-                    ? '<span class="status-badge status-approved">✓ Approved</span>'
-                    : '<span class="status-badge status-pending">⏳ Pending Review</span>';
-                modalCurrentStatus.innerHTML = statusBadge;
-            }
-            
-            // Document link
-            if (documentSection && documentLink && documentFile) {
-                documentSection.style.display = 'block';
-                documentLink.href = 'download.php?file=' + documentFile;
-            } else if (documentSection) {
-                documentSection.style.display = 'none';
-            }
-            
-            // Existing review
-            if (existingReview) {
-                if (reviewedBy && reviewedAt) {
-                    existingReview.style.display = 'block';
-                    if (reviewedByElement) reviewedByElement.textContent = reviewedBy;
-                    if (reviewedAtElement) reviewedAtElement.textContent = reviewedAt;
-                    if (existingComments) existingComments.textContent = comments || 'No comments provided';
-                } else {
-                    existingReview.style.display = 'none';
-                }
-            }
-            
-            // Set form values
-            if (reviewEntryId) reviewEntryId.value = entryId;
-            if (reviewStatus) reviewStatus.value = status;
-            if (reviewComments) reviewComments.value = comments || '';
-            
-            if (modal) modal.style.display = 'block';
-        });
-    });
+		btn.addEventListener('click', function() {
+			const entryId = this.dataset.entryId;
+			const title = this.dataset.title;
+			const description = this.dataset.description;
+			const category = this.dataset.category;
+			const hours = this.dataset.hours;
+			const points = this.dataset.points;  // ADD THIS LINE
+			const date = this.dataset.date;
+			const status = this.dataset.status;
+			const comments = this.dataset.comments;
+			const reviewedBy = this.dataset.reviewedBy;
+			const reviewedAt = this.dataset.reviewedAt;
+			
+			// Parse documents JSON
+			let documents = [];
+			try {
+				documents = JSON.parse(this.dataset.documents);
+			} catch (e) {
+				console.error('Error parsing documents:', e);
+				documents = [];
+			}
+			
+			// Populate modal - use window.document to be explicit
+			const modalTitle = window.document.getElementById('modalTitle');
+			const modalDate = window.document.getElementById('modalDate');
+			const modalCategory = window.document.getElementById('modalCategory');
+			const modalHours = window.document.getElementById('modalHours');
+			const modalPoints = window.document.getElementById('modalPoints');  // ADD THIS
+			const modalDescription = window.document.getElementById('modalDescription');
+			const modalCurrentStatus = window.document.getElementById('modalCurrentStatus');
+			const documentSection = window.document.getElementById('documentSection');
+			const documentList = window.document.getElementById('documentList');
+			const existingReview = window.document.getElementById('existingReview');
+			const reviewedByElement = window.document.getElementById('reviewedBy');
+			const reviewedAtElement = window.document.getElementById('reviewedAt');
+			const existingComments = window.document.getElementById('existingComments');
+			const reviewEntryId = window.document.getElementById('review_entry_id');
+			const reviewStatus = window.document.getElementById('review_status');
+			const reviewComments = window.document.getElementById('review_comments');
+			
+			if (modalTitle) modalTitle.textContent = title;
+			if (modalDate) modalDate.textContent = date;
+			if (modalCategory) modalCategory.textContent = category;
+			if (modalHours) modalHours.textContent = hours + ' hours';
+			
+			// ADD POINTS DISPLAY LOGIC
+			if (modalPoints) {
+				if (points && parseFloat(points) > 0) {
+					modalPoints.textContent = parseFloat(points).toFixed(2) + ' points';
+				} else {
+					modalPoints.textContent = 'Not specified';
+				}
+			}
+			
+			if (modalDescription) modalDescription.textContent = description || 'No description provided';
+			
+			// Status badge
+			if (modalCurrentStatus) {
+				const statusBadge = status === 'approved' 
+					? '<span class="status-badge status-approved">✓ Approved</span>'
+					: '<span class="status-badge status-pending">⏳ Pending Review</span>';
+				modalCurrentStatus.innerHTML = statusBadge;
+			}
+			
+			// Documents display
+			if (documentSection && documentList) {
+				if (documents && documents.length > 0) {
+					documentSection.style.display = 'block';
+					documentList.innerHTML = documents.map(doc => `
+						<div class="modal-document-item">
+							<div class="modal-document-icon">📄</div>
+							<div class="modal-document-info">
+								<div class="modal-document-name">${escapeHtml(doc.original_filename)}</div>
+								<div class="modal-document-size">${formatFileSize(doc.file_size)}</div>
+							</div>
+							<a href="download.php?file=${encodeURIComponent(doc.filename)}" 
+							   target="_blank" 
+							   class="modal-document-link">
+								View
+							</a>
+						</div>
+					`).join('');
+				} else {
+					documentSection.style.display = 'none';
+				}
+			}
+			
+			// Existing review
+			if (existingReview) {
+				if (reviewedBy && reviewedAt) {
+					existingReview.style.display = 'block';
+					if (reviewedByElement) reviewedByElement.textContent = reviewedBy;
+					if (reviewedAtElement) reviewedAtElement.textContent = reviewedAt;
+					if (existingComments) existingComments.textContent = comments || 'No comments provided';
+				} else {
+					existingReview.style.display = 'none';
+				}
+			}
+			
+			// Set form values
+			if (reviewEntryId) reviewEntryId.value = entryId;
+			if (reviewStatus) reviewStatus.value = status;
+			if (reviewComments) reviewComments.value = comments || '';
+			
+			if (modal) modal.style.display = 'block';
+		});
+	});
 
     if (closeBtn) {
         closeBtn.onclick = () => modal.style.display = 'none';
@@ -531,6 +677,13 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Escape HTML helper function
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 </script>
 
 <?php include 'includes/footer.php'; ?>
