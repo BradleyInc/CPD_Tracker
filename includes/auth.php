@@ -27,6 +27,210 @@ function getTotalCPDHours($pdo, $user_id) {
     return $result['total_hours'];
 }
 
+function handleFileUpload($file, $user_id) {
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        return null;
+    }
+    
+    // Verify it's a valid uploaded file
+    if (!is_uploaded_file($file['tmp_name'])) {
+        return null;
+    }
+    
+    $upload_dir = 'uploads/';
+    
+    // Create uploads directory if it doesn't exist
+    if (!is_dir($upload_dir)) {
+        mkdir($upload_dir, 0755, true);
+    }
+    
+    // Generate secure filename with user_id prefix
+    $file_extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    $allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'];
+    
+    if (!in_array($file_extension, $allowed_extensions)) {
+        return null;
+    }
+    
+    // Create unique filename with user_id and timestamp to prevent collisions
+    $timestamp = time();
+    $random = bin2hex(random_bytes(8));
+    $filename = "user{$user_id}_{$timestamp}_{$random}.{$file_extension}";
+    
+    // Ensure the upload directory exists and get its real path
+    $upload_dir_real = realpath($upload_dir);
+    if ($upload_dir_real === false) {
+        return null;
+    }
+    
+    $filepath = $upload_dir_real . DIRECTORY_SEPARATOR . $filename;
+    
+    if (move_uploaded_file($file['tmp_name'], $filepath)) {
+        return $filename;
+    }
+    
+    return null;
+}
+
+// Function to get user role (add to auth.php)
+function getUserRole($pdo, $user_id) {
+    $stmt = $pdo->prepare("SELECT r.name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?");
+    $stmt->execute([$user_id]);
+    return $stmt->fetchColumn();
+}
+
+/**
+ * Handle multiple file uploads for CPD entry
+ * Returns array of uploaded filenames or false on error
+ */
+function handleMultipleFileUploads($files, $user_id) {
+    if (!isset($files['tmp_name']) || !is_array($files['tmp_name'])) {
+        return [];
+    }
+    
+    $uploaded_files = [];
+    $file_count = count($files['tmp_name']);
+    
+    for ($i = 0; $i < $file_count; $i++) {
+        // Skip if no file or error
+        if ($files['error'][$i] !== UPLOAD_ERR_OK) {
+            continue;
+        }
+        
+        // Create file info array for single file processing
+        $single_file = [
+            'name' => $files['name'][$i],
+            'type' => $files['type'][$i],
+            'tmp_name' => $files['tmp_name'][$i],
+            'error' => $files['error'][$i],
+            'size' => $files['size'][$i]
+        ];
+        
+        $filename = handleFileUpload($single_file, $user_id);
+        if ($filename) {
+            $uploaded_files[] = [
+                'filename' => $filename,
+                'original_name' => $files['name'][$i],
+                'size' => $files['size'][$i]
+            ];
+        }
+    }
+    
+    return $uploaded_files;
+}
+
+/**
+ * Save documents to database
+ */
+function saveCPDDocuments($pdo, $entry_id, $files_data) {
+    if (empty($files_data)) {
+        return true;
+    }
+    
+    $stmt = $pdo->prepare("
+        INSERT INTO cpd_documents (entry_id, filename, original_filename, file_size) 
+        VALUES (?, ?, ?, ?)
+    ");
+    
+    foreach ($files_data as $file) {
+        $stmt->execute([
+            $entry_id,
+            $file['filename'],
+            $file['original_name'],
+            $file['size']
+        ]);
+    }
+    
+    return true;
+}
+
+/**
+ * Get documents for a CPD entry
+ */
+function getCPDDocuments($pdo, $entry_id) {
+    $stmt = $pdo->prepare("
+        SELECT * FROM cpd_documents 
+        WHERE entry_id = ? 
+        ORDER BY uploaded_at ASC
+    ");
+    $stmt->execute([$entry_id]);
+    return $stmt->fetchAll();
+}
+
+/**
+ * Delete a single document
+ */
+function deleteCPDDocument($pdo, $document_id, $user_id) {
+    // Get document info and verify ownership
+    $stmt = $pdo->prepare("
+        SELECT d.filename, d.entry_id, e.user_id
+        FROM cpd_documents d
+        JOIN cpd_entries e ON d.entry_id = e.id
+        WHERE d.id = ? AND e.user_id = ?
+    ");
+    $stmt->execute([$document_id, $user_id]);
+    $doc = $stmt->fetch();
+    
+    if (!$doc) {
+        return false;
+    }
+    
+    // Verify filename belongs to this user
+    if (preg_match('/^user' . $user_id . '_/', $doc['filename'])) {
+        $filepath = 'uploads/' . $doc['filename'];
+        if (file_exists($filepath)) {
+            unlink($filepath);
+        }
+    }
+    
+    // Delete from database
+    $stmt = $pdo->prepare("DELETE FROM cpd_documents WHERE id = ?");
+    return $stmt->execute([$document_id]);
+}
+
+/**
+ * Delete all documents for an entry (used when deleting the entry)
+ */
+function deleteAllEntryDocuments($pdo, $entry_id, $user_id) {
+    $docs = getCPDDocuments($pdo, $entry_id);
+    
+    foreach ($docs as $doc) {
+        // Verify filename belongs to this user
+        if (preg_match('/^user' . $user_id . '_/', $doc['filename'])) {
+            $filepath = 'uploads/' . $doc['filename'];
+            if (file_exists($filepath)) {
+                unlink($filepath);
+            }
+        }
+    }
+    
+    // Delete all from database
+    $stmt = $pdo->prepare("DELETE FROM cpd_documents WHERE entry_id = ?");
+    return $stmt->execute([$entry_id]);
+}
+
+/**
+ * Updated deleteCPDEntry function to handle multiple documents
+ */
+function deleteCPDEntry($pdo, $entry_id, $user_id) {
+    // First verify ownership
+    $stmt = $pdo->prepare("SELECT id FROM cpd_entries WHERE id = ? AND user_id = ?");
+    $stmt->execute([$entry_id, $user_id]);
+    if (!$stmt->fetch()) {
+        return false;
+    }
+    
+    // Delete all associated documents
+    deleteAllEntryDocuments($pdo, $entry_id, $user_id);
+    
+    // Delete the database entry (CASCADE will handle cpd_documents table)
+    $stmt = $pdo->prepare("DELETE FROM cpd_entries WHERE id = ? AND user_id = ?");
+    return $stmt->execute([$entry_id, $user_id]);
+}
+
+/**
+ * Updated validation to handle multiple files
+ */
 function validateCPDEntry($data) {
     $errors = [];
     
@@ -61,6 +265,17 @@ function validateCPDEntry($data) {
         $errors[] = "Hours must be greater than 0";
     } elseif ($data['hours'] > 100) {
         $errors[] = "Hours cannot exceed 100";
+    }
+    
+    // Validate points (optional field)
+    if (isset($data['points']) && $data['points'] !== '' && $data['points'] !== null) {
+        if (!is_numeric($data['points'])) {
+            $errors[] = "Points must be a valid number";
+        } elseif ($data['points'] < 0) {
+            $errors[] = "Points cannot be negative";
+        } elseif ($data['points'] > 9999.99) {
+            $errors[] = "Points cannot exceed 9999.99";
+        }
     }
     
     // Validate category against allowed values
@@ -112,80 +327,5 @@ function validateCPDEntry($data) {
     }
     
     return $errors;
-}
-
-function handleFileUpload($file, $user_id) {
-    if ($file['error'] !== UPLOAD_ERR_OK) {
-        return null;
-    }
-    
-    // Verify it's a valid uploaded file
-    if (!is_uploaded_file($file['tmp_name'])) {
-        return null;
-    }
-    
-    $upload_dir = 'uploads/';
-    
-    // Create uploads directory if it doesn't exist
-    if (!is_dir($upload_dir)) {
-        mkdir($upload_dir, 0755, true);
-    }
-    
-    // Generate secure filename with user_id prefix
-    $file_extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-    $allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'];
-    
-    if (!in_array($file_extension, $allowed_extensions)) {
-        return null;
-    }
-    
-    // Create unique filename with user_id and timestamp to prevent collisions
-    $timestamp = time();
-    $random = bin2hex(random_bytes(8));
-    $filename = "user{$user_id}_{$timestamp}_{$random}.{$file_extension}";
-    
-    // Ensure the upload directory exists and get its real path
-    $upload_dir_real = realpath($upload_dir);
-    if ($upload_dir_real === false) {
-        return null;
-    }
-    
-    $filepath = $upload_dir_real . DIRECTORY_SEPARATOR . $filename;
-    
-    if (move_uploaded_file($file['tmp_name'], $filepath)) {
-        return $filename;
-    }
-    
-    return null;
-}
-
-function deleteCPDEntry($pdo, $entry_id, $user_id) {
-    // First get the file path to delete the physical file
-    $stmt = $pdo->prepare("SELECT supporting_docs FROM cpd_entries WHERE id = ? AND user_id = ?");
-    $stmt->execute([$entry_id, $user_id]);
-    $entry = $stmt->fetch();
-    
-    if ($entry && $entry['supporting_docs']) {
-        $filename = $entry['supporting_docs'];
-        
-        // Verify filename belongs to this user before deletion
-        if (preg_match('/^user' . $user_id . '_/', $filename)) {
-            $filepath = 'uploads/' . $filename;
-            if (file_exists($filepath)) {
-                unlink($filepath);
-            }
-        }
-    }
-    
-    // Delete the database entry
-    $stmt = $pdo->prepare("DELETE FROM cpd_entries WHERE id = ? AND user_id = ?");
-    return $stmt->execute([$entry_id, $user_id]);
-}
-
-// Function to get user role (add to auth.php)
-function getUserRole($pdo, $user_id) {
-    $stmt = $pdo->prepare("SELECT r.name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?");
-    $stmt->execute([$user_id]);
-    return $stmt->fetchColumn();
 }
 ?>
