@@ -1,527 +1,360 @@
-// Client-side form validation and interactivity
+// Updated script.js for CPD Tracker with multiple document support
+
 document.addEventListener('DOMContentLoaded', function() {
-    // Form validation for registration
-    const registerForm = document.querySelector('form[action*="register"]');
-    if (registerForm) {
-        registerForm.addEventListener('submit', function(e) {
-            const password = document.querySelector('input[name="password"]');
-            const confirmPassword = document.querySelector('input[name="confirm_password"]');
-            
-            if (password.value !== confirmPassword.value) {
-                e.preventDefault();
-                alert('Passwords do not match!');
-                return false;
-            }
-            
-            if (password.value.length < 6) {
-                e.preventDefault();
-                alert('Password must be at least 6 characters long!');
-                return false;
-            }
-        });
-    }
+    console.log('Script loaded');
     
-    // CPD entry form enhancement
-    const cpdForm = document.querySelector('.cpd-form form');
-    if (cpdForm) {
-        // Real-time hours validation
-        const hoursInput = cpdForm.querySelector('input[name="hours"]');
-        if (hoursInput) {
-            hoursInput.addEventListener('change', function() {
-                if (this.value < 0.5) {
-                    this.value = 0.5;
-                }
-                if (this.value > 100) {
-                    this.value = 100;
-                }
-            });
-        }
-        
-        // Date validation - cannot be in the future
-        const dateInput = cpdForm.querySelector('input[name="date_completed"]');
-        if (dateInput) {
-            const today = new Date().toISOString().split('T')[0];
-            dateInput.max = today;
-            
-            dateInput.addEventListener('change', function() {
-                if (this.value > today) {
-                    alert('Date cannot be in the future!');
-                    this.value = today;
-                }
-            });
-        }
-        
-        // File upload validation - UPDATED for .ics files
-        const fileInput = cpdForm.querySelector('input[type="file"]');
-        if (fileInput) {
-            fileInput.addEventListener('change', function() {
-                const file = this.files[0];
-                if (file) {
-                    // Check file size (10MB max for .ics files)
-                    const maxSize = file.name.toLowerCase().endsWith('.ics') ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
-                    if (file.size > maxSize) {
-                        alert('File size must be less than ' + (maxSize / (1024 * 1024)) + 'MB');
-                        this.value = '';
-                        return;
-                    }
-                    
-                    // Check file type - UPDATED for .ics files
-                    const allowedTypes = [
-                        'application/pdf', 
-                        'image/jpeg', 
-                        'image/png', 
-                        'application/msword', 
-                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                        'text/calendar', // .ics files
-                        'application/octet-stream', // Some .ics files
-                        'text/plain' // Some .ics files may be detected as text/plain
-                    ];
-                    
-                    // Also check by file extension for .ics files
-                    const fileExt = file.name.toLowerCase().split('.').pop();
-                    const isICSFile = fileExt === 'ics';
-                    
-                    if (!allowedTypes.includes(file.type) && !isICSFile) {
-                        alert('Please upload PDF, JPEG, PNG, Word documents, or .ics calendar files only');
-                        this.value = '';
-                        return;
-                    }
-                }
-            });
-        }
-    }
-    
-    // Auto-hide alerts after 5 seconds
-    const alerts = document.querySelectorAll('.alert');
-    alerts.forEach(alert => {
-        setTimeout(() => {
-            alert.style.opacity = '0';
-            alert.style.transition = 'opacity 0.5s';
-            setTimeout(() => alert.remove(), 500);
-        }, 5000);
-    });
-    
-    // Calculate total CPD hours
-    function calculateTotalHours() {
-        const hourCells = document.querySelectorAll('.entries-table td:nth-child(5)');
-        let total = 0;
-        
-        hourCells.forEach(cell => {
-            const hours = parseFloat(cell.textContent) || 0;
-            total += hours;
-        });
-        
-        return total;
-    }
-    
-    // Display total hours if we're on the dashboard
-    if (document.querySelector('.entries-table')) {
-        const totalHours = calculateTotalHours();
-        const table = document.querySelector('.entries-table');
-        
-        // Add total row if not already present
-        if (!document.querySelector('.total-hours-row')) {
-            const tbody = table.querySelector('tbody');
-            const totalRow = document.createElement('tr');
-            totalRow.className = 'total-hours-row';
-            totalRow.innerHTML = `
-                <td colspan="5" style="text-align: right; font-weight: bold;">Total Hours:</td>
-                <td style="font-weight: bold;">${totalHours.toFixed(2)} hours</td>
-            `;
-            tbody.appendChild(totalRow);
-        }
-    }
-    
-    // Set default dates for export form (current year)
-    const today = new Date().toISOString().split('T')[0];
-    const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
-    
-    const startDateInput = document.getElementById('exportStartDate');
-    const endDateInput = document.getElementById('exportEndDate');
-    
-    if (startDateInput && endDateInput) {
-        startDateInput.value = yearStart;
-        endDateInput.value = today;
-    }
-    
-    // Initialize bulk delete and edit functionality
+    // Initialize all features
+    initializeModal();
     initializeBulkActions();
-    
-    // Initialize modal functionality
-    initializeEditModal();
+    initializeDocumentHandling();
 });
 
-// Utility functions
-function formatDate(dateString) {
-    const options = { year: 'numeric', month: 'short', day: 'numeric' };
-    return new Date(dateString).toLocaleDateString(undefined, options);
+// ===== MODAL HANDLING =====
+function initializeModal() {
+    const modal = document.getElementById('editModal');
+    const closeBtn = modal?.querySelector('.close');
+    const cancelBtn = document.getElementById('cancelEdit');
+    
+    // Close modal handlers
+    if (closeBtn) {
+        closeBtn.onclick = function() {
+            modal.style.display = 'none';
+        };
+    }
+    
+    if (cancelBtn) {
+        cancelBtn.onclick = function() {
+            modal.style.display = 'none';
+        };
+    }
+    
+    // Close on outside click
+    window.onclick = function(event) {
+        if (event.target === modal) {
+            modal.style.display = 'none';
+        }
+    };
+    
+    // Double-click to edit entry
+    document.querySelectorAll('.entries-table tbody tr[data-entry-id]').forEach(row => {
+        row.addEventListener('dblclick', function() {
+            openEditModal(this);
+        });
+    });
+    
+    // Edit Selected button handler
+    const editSelectedBtn = document.getElementById('editSelectedBtn');
+    if (editSelectedBtn) {
+        editSelectedBtn.addEventListener('click', editSelectedEntry);
+    }
 }
 
-// Bulk actions functionality
+// Open edit modal and populate with entry data
+async function openEditModal(row) {
+    const entryId = row.dataset.entryId;
+    const titleElement = row.querySelector('td:nth-child(3) div');
+    const title = titleElement ? titleElement.textContent.split('\n')[0].trim() : '';
+    const description = row.dataset.description || '';
+    const dateElement = row.querySelector('td:nth-child(2)');
+    const date = dateElement ? dateElement.textContent.trim() : '';
+    const categoryElement = row.querySelector('td:nth-child(4)');
+    const category = categoryElement ? categoryElement.textContent.trim() : '';
+    const hoursElement = row.querySelector('td:nth-child(5)');
+    const hoursText = hoursElement ? hoursElement.textContent.trim() : '0';
+    const hours = parseFloat(hoursText);
+    
+    console.log('Opening edit modal for entry:', entryId);
+    
+    // Populate form fields
+    document.getElementById('edit_entry_id').value = entryId;
+    document.getElementById('edit_title').value = title;
+    document.getElementById('edit_description').value = description;
+    document.getElementById('edit_date_completed').value = date;
+    document.getElementById('edit_hours').value = hours;
+    document.getElementById('edit_category').value = category;
+    
+    // Load existing documents
+    await loadExistingDocuments(entryId);
+    
+    // Show modal
+    document.getElementById('editModal').style.display = 'block';
+}
+
+// Load existing documents for an entry
+async function loadExistingDocuments(entryId) {
+    const container = document.getElementById('existingDocuments');
+    
+    if (!container) {
+        console.error('existingDocuments container not found');
+        return;
+    }
+    
+    try {
+        container.innerHTML = '<div style="padding: 0.5rem; color: #666;">Loading documents...</div>';
+        
+        const response = await fetch(`ajax_get_documents.php?entry_id=${entryId}`);
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch documents');
+        }
+        
+        const documents = await response.json();
+        
+        console.log('Loaded documents:', documents);
+        
+        if (documents.length > 0) {
+            container.innerHTML = documents.map(doc => `
+                <div class="existing-doc-item" data-doc-id="${doc.id}">
+                    <div class="doc-info">
+                        <span>📄</span>
+                        <div>
+                            <div class="doc-name">${escapeHtml(doc.original_filename)}</div>
+                            <div class="doc-size">${formatFileSize(doc.file_size)}</div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-remove-doc" onclick="deleteDocumentFromModal(${doc.id}, ${entryId})">
+                        Remove
+                    </button>
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = '<div class="no-documents">No documents attached</div>';
+        }
+    } catch (error) {
+        console.error('Error loading documents:', error);
+        container.innerHTML = '<div class="no-documents" style="color: #d9534f;">Error loading documents</div>';
+    }
+}
+
+// ===== BULK ACTIONS =====
 function initializeBulkActions() {
+    const checkboxes = document.querySelectorAll('.entry-checkbox');
     const selectAllCheckbox = document.getElementById('selectAll');
-    const entryCheckboxes = document.querySelectorAll('.entry-checkbox');
-    const bulkActions = document.getElementById('bulkActions');
+    const bulkActionsDiv = document.getElementById('bulkActions');
     const selectAllBtn = document.getElementById('selectAllBtn');
     const deselectAllBtn = document.getElementById('deselectAllBtn');
     const editSelectedBtn = document.getElementById('editSelectedBtn');
     const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
-    const selectedCount = document.getElementById('selectedCount');
+    const deleteForm = document.getElementById('deleteForm');
     
-    if (!selectAllCheckbox || entryCheckboxes.length === 0) {
+    // Update selected count and button visibility
+    function updateBulkActions() {
+        const selectedCount = document.querySelectorAll('.entry-checkbox:checked').length;
+        const selectedCountSpan = document.getElementById('selectedCount');
+        
+        if (selectedCount > 0) {
+            bulkActionsDiv.style.display = 'block';
+            if (selectedCountSpan) {
+                selectedCountSpan.textContent = `${selectedCount} selected`;
+            }
+            
+            // Show/hide edit button based on selection
+            if (editSelectedBtn) {
+                editSelectedBtn.style.display = selectedCount === 1 ? 'inline-block' : 'none';
+            }
+        } else {
+            bulkActionsDiv.style.display = 'none';
+        }
+    }
+    
+    // Individual checkbox change
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateBulkActions);
+    });
+    
+    // Select all checkbox
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+            });
+            updateBulkActions();
+        });
+    }
+    
+    // Select All button
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', function() {
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = true;
+            });
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = true;
+            }
+            updateBulkActions();
+        });
+    }
+    
+    // Deselect All button
+    if (deselectAllBtn) {
+        deselectAllBtn.addEventListener('click', function() {
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = false;
+            }
+            updateBulkActions();
+        });
+    }
+    
+    // Delete confirmation
+    if (deleteForm) {
+        deleteForm.addEventListener('submit', function(e) {
+            const selectedCount = document.querySelectorAll('.entry-checkbox:checked').length;
+            if (selectedCount > 0) {
+                const confirmMessage = `Are you sure you want to delete ${selectedCount} entry(ies)? This cannot be undone.`;
+                if (!confirm(confirmMessage)) {
+                    e.preventDefault();
+                }
+            }
+        });
+    }
+}
+
+// Edit selected entry (single selection only)
+function editSelectedEntry() {
+    const selectedCheckboxes = document.querySelectorAll('.entry-checkbox:checked');
+    
+    if (selectedCheckboxes.length === 0) {
+        alert('Please select an entry to edit');
         return;
     }
     
-    // Update selected count and show/hide bulk actions
-    function updateSelectedCount() {
-        const checkedBoxes = document.querySelectorAll('.entry-checkbox:checked');
-        const count = checkedBoxes.length;
-        
-        if (selectedCount) {
-            selectedCount.textContent = count + ' selected';
-        }
-        
-        if (bulkActions) {
-            bulkActions.style.display = count > 0 ? 'block' : 'none';
-        }
-        
-        // Show/hide edit button based on selection count
-        if (editSelectedBtn) {
-            editSelectedBtn.style.display = count === 1 ? 'inline-block' : 'none';
-        }
-        
-        // Update select all checkbox state
-        if (selectAllCheckbox) {
-            selectAllCheckbox.checked = count === entryCheckboxes.length;
-            selectAllCheckbox.indeterminate = count > 0 && count < entryCheckboxes.length;
-        }
-        
-        // Highlight selected rows
-        entryCheckboxes.forEach(checkbox => {
-            const row = checkbox.closest('tr');
-            if (checkbox.checked) {
-                row.classList.add('selected');
-            } else {
-                row.classList.remove('selected');
-            }
-        });
+    if (selectedCheckboxes.length > 1) {
+        alert('Please select only one entry to edit');
+        return;
     }
     
-    // NEW: Toggle checkbox when clicking anywhere on the row
-    function setupClickableRows() {
-        const rows = document.querySelectorAll('.entries-table tbody tr');
-        rows.forEach(row => {
-            // Don't apply to the total row
-            if (row.classList.contains('total-hours-row')) {
-                return;
-            }
-            
-            // Make the row clickable
-            row.style.cursor = 'pointer';
-            row.addEventListener('click', function(e) {
-                // Don't trigger if clicking on a link (document link) or checkbox directly
-                if (e.target.tagName === 'A' || e.target.tagName === 'INPUT') {
-                    return;
-                }
-                
-                const checkbox = this.querySelector('.entry-checkbox');
-                if (checkbox) {
-                    checkbox.checked = !checkbox.checked;
-                    checkbox.dispatchEvent(new Event('change'));
-                }
-            });
-            
-            // Add hover effect
-            row.addEventListener('mouseenter', function() {
-                if (!this.classList.contains('selected')) {
-                    this.style.backgroundColor = '#f5f5f5';
-                }
-            });
-            
-            row.addEventListener('mouseleave', function() {
-                if (!this.classList.contains('selected')) {
-                    this.style.backgroundColor = '';
-                }
-            });
-        });
-    }
-    
-    // Select all checkboxes
-    function selectAll() {
-        entryCheckboxes.forEach(checkbox => {
-            checkbox.checked = true;
-        });
-        updateSelectedCount();
-    }
-    
-    // Deselect all checkboxes
-    function deselectAll() {
-        entryCheckboxes.forEach(checkbox => {
-            checkbox.checked = false;
-        });
-        updateSelectedCount();
-    }
-    
-    // Edit single selected entry
-    function editSelectedEntry() {
-        const checkedBoxes = document.querySelectorAll('.entry-checkbox:checked');
-        if (checkedBoxes.length !== 1) {
-            alert('Please select exactly one entry to edit.');
-            return;
-        }
-        
-        const entryId = checkedBoxes[0].value;
-        const row = checkedBoxes[0].closest('tr');
-        
-        // Get entry data from table row data attributes
-        const entryData = {
-            id: entryId,
-            date_completed: row.cells[1].textContent.trim(),
-            title: row.cells[2].textContent.trim(),
-            category: row.cells[3].textContent.trim(),
-            hours: parseFloat(row.cells[4].textContent) || 0,
-            description: row.dataset.description || '',
-            hasDocument: row.cells[5].querySelector('a') ? true : false,
-            documentName: row.cells[5].querySelector('a') ? row.cells[5].querySelector('a').textContent.trim() : ''
-        };
-        
-        console.log('Entry data loaded for edit:', entryData);
-        
-        // Open edit modal with data
-        openEditModal(entryData);
-    }
-    
-    // Event listeners
-    if (selectAllCheckbox) {
-        selectAllCheckbox.addEventListener('change', function() {
-            if (this.checked) {
-                selectAll();
-            } else {
-                deselectAll();
-            }
-        });
-    }
-    
-    if (selectAllBtn) {
-        selectAllBtn.addEventListener('click', selectAll);
-    }
-    
-    if (deselectAllBtn) {
-        deselectAllBtn.addEventListener('click', deselectAll);
-    }
-    
-    if (editSelectedBtn) {
-        editSelectedBtn.addEventListener('click', editSelectedEntry);
-    }
-    
-    entryCheckboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', updateSelectedCount);
-    });
-    
-    // Enhanced delete confirmation - ONLY THIS ONE SHOULD RUN
-    if (deleteSelectedBtn) {
-        deleteSelectedBtn.addEventListener('click', function(e) {
-            const checkboxes = document.querySelectorAll('.entry-checkbox:checked');
-            if (checkboxes.length === 0) {
-                e.preventDefault();
-                alert('Please select at least one entry to delete.');
-                return false;
-            }
-            
-            const entryTitles = [];
-            checkboxes.forEach(checkbox => {
-                const row = checkbox.closest('tr');
-                const titleCell = row.querySelector('td:nth-child(3)');
-                if (titleCell) {
-                    entryTitles.push(titleCell.textContent.trim());
-                }
-            });
-            
-            let message = 'Are you sure you want to delete the following CPD entries?\n\n';
-            entryTitles.forEach((title, index) => {
-                message += `${index + 1}. ${title}\n`;
-            });
-            message += '\nThis action cannot be undone.';
-            
-            if (!confirm(message)) {
-                e.preventDefault();
-                return false;
-            }
-            
-            // If confirmed, allow the form to submit
-            return true;
-        });
-    }
-    
-    // Initialize selected count
-    updateSelectedCount();
-    
-    // Setup clickable rows
-    setupClickableRows();
+    // Get the row and open edit modal
+    const checkbox = selectedCheckboxes[0];
+    const row = checkbox.closest('tr');
+    openEditModal(row);
 }
 
-// Edit modal functionality
-function initializeEditModal() {
-    const modal = document.getElementById('editModal');
-    const closeBtn = document.querySelector('.close');
-    const cancelBtn = document.getElementById('cancelEdit');
-    const editForm = document.getElementById('editForm');
-    const keepFileCheckbox = document.getElementById('keepFileCheckbox');
-    const editFileInput = document.getElementById('edit_supporting_doc');
-    const currentFileInfo = document.getElementById('currentFileInfo');
-    const currentFileName = document.getElementById('currentFileName');
-    const keepExistingFileInput = document.getElementById('edit_keep_existing_file');
-    
-    // Open modal with entry data
-    window.openEditModal = function(entryData) {
-        console.log('Opening modal with data:', entryData);
-        
-        // Populate form fields
-        document.getElementById('edit_entry_id').value = entryData.id;
-        document.getElementById('edit_title').value = entryData.title;
-        document.getElementById('edit_description').value = entryData.description || '';
-        document.getElementById('edit_date_completed').value = entryData.date_completed;
-        document.getElementById('edit_hours').value = entryData.hours;
-        document.getElementById('edit_category').value = entryData.category;
-        
-        // Handle file display
-        if (entryData.hasDocument && entryData.documentName) {
-            currentFileInfo.style.display = 'block';
-            currentFileName.textContent = entryData.documentName;
-            keepFileCheckbox.checked = true;
-            keepExistingFileInput.value = '1';
-            editFileInput.disabled = true;
-        } else {
-            currentFileInfo.style.display = 'none';
-            keepFileCheckbox.checked = false;
-            keepExistingFileInput.value = '0';
-            editFileInput.disabled = false;
-        }
-        
-        // Show modal
-        modal.style.display = 'block';
-        console.log('Modal displayed');
-    };
-    
-    // Close modal
-    function closeModal() {
-        modal.style.display = 'none';
-        if (editForm) editForm.reset();
-        if (currentFileInfo) currentFileInfo.style.display = 'none';
-        if (editFileInput) editFileInput.disabled = false;
-        console.log('Modal closed');
-    }
-    
-    // Close modal when clicking X
-    if (closeBtn) {
-        closeBtn.addEventListener('click', closeModal);
-    }
-    
-    // Close modal when clicking cancel
-    if (cancelBtn) {
-        cancelBtn.addEventListener('click', closeModal);
-    }
-    
-    // Close modal when clicking outside
-    window.addEventListener('click', function(event) {
-        if (event.target === modal) {
-            closeModal();
+// ===== DOCUMENT HANDLING =====
+function initializeDocumentHandling() {
+    // Attach event listeners to delete buttons in main table
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('btn-delete-doc') || e.target.parentElement.classList.contains('btn-delete-doc')) {
+            const btn = e.target.classList.contains('btn-delete-doc') ? e.target : e.target.parentElement;
+            const docId = btn.dataset.docId;
+            const entryId = btn.dataset.entryId;
+            
+            if (docId && entryId) {
+                deleteDocument(docId, entryId);
+            }
         }
     });
-    
-    // Handle keep file checkbox
-    if (keepFileCheckbox) {
-        keepFileCheckbox.addEventListener('change', function() {
-            keepExistingFileInput.value = this.checked ? '1' : '0';
-            if (editFileInput) editFileInput.disabled = this.checked;
-            if (!this.checked && editFileInput) {
-                editFileInput.value = '';
-            }
-        });
+}
+
+// Delete document from main table
+async function deleteDocument(docId, entryId) {
+    if (!confirm('Are you sure you want to delete this document?')) {
+        return;
     }
     
-    // Handle file input change
-    if (editFileInput) {
-        editFileInput.addEventListener('change', function() {
-            if (this.files.length > 0 && keepFileCheckbox) {
-                keepFileCheckbox.checked = false;
-                keepExistingFileInput.value = '0';
-            }
+    try {
+        const formData = new FormData();
+        formData.append('delete_document', '1');
+        formData.append('document_id', docId);
+        
+        const response = await fetch('ajax_delete_document.php', {
+            method: 'POST',
+            body: formData
         });
-    }
-    
-    // Form validation for edit form - UPDATED for .ics files
-    if (editForm) {
-        editForm.addEventListener('submit', function(e) {
-            console.log('Edit form submit triggered');
-            
-            const hoursInput = document.getElementById('edit_hours');
-            const dateInput = document.getElementById('edit_date_completed');
-            const today = new Date().toISOString().split('T')[0];
-            
-            // Validate hours
-            if (hoursInput && hoursInput.value < 0.5) {
-                e.preventDefault();
-                alert('Hours must be at least 0.5');
-                console.log('Validation failed: hours too low');
-                return false;
-            }
-            
-            if (hoursInput && hoursInput.value > 100) {
-                e.preventDefault();
-                alert('Hours cannot exceed 100');
-                console.log('Validation failed: hours too high');
-                return false;
-            }
-            
-            // Validate date
-            if (dateInput && dateInput.value > today) {
-                e.preventDefault();
-                alert('Date cannot be in the future');
-                console.log('Validation failed: future date');
-                return false;
-            }
-            
-            // Validate file if uploading new one - UPDATED for .ics files
-            const fileInput = document.getElementById('edit_supporting_doc');
-            if (fileInput && fileInput.files.length > 0) {
-                const file = fileInput.files[0];
-                
-                // Check file size (10MB max for .ics files)
-                const maxSize = file.name.toLowerCase().endsWith('.ics') ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
-                if (file.size > maxSize) {
-                    e.preventDefault();
-                    alert('File size must be less than ' + (maxSize / (1024 * 1024)) + 'MB');
-                    console.log('Validation failed: file too large');
-                    return false;
-                }
-                
-                // Check file type - UPDATED for .ics files
-                const allowedTypes = [
-                    'application/pdf', 
-                    'image/jpeg', 
-                    'image/png', 
-                    'application/msword', 
-                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                    'text/calendar', // .ics files
-                    'application/octet-stream', // Some .ics files
-                    'text/plain' // Some .ics files may be detected as text/plain
-                ];
-                
-                // Also check by file extension for .ics files
-                const fileExt = file.name.toLowerCase().split('.').pop();
-                const isICSFile = fileExt === 'ics';
-                
-                if (!allowedTypes.includes(file.type) && !isICSFile) {
-                    e.preventDefault();
-                    alert('Please upload PDF, JPEG, PNG, Word documents, or .ics calendar files only');
-                    console.log('Validation failed: invalid file type');
-                    return false;
+        
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Remove document from display
+            const docElement = document.querySelector(`[data-doc-id="${docId}"]`);
+            if (docElement) {
+                const docItem = docElement.closest('.document-item');
+                if (docItem) {
+                    docItem.remove();
                 }
             }
             
-            console.log('Edit form validation passed, submitting...');
-            return true;
-        });
+            // Check if this was the last document
+            const entryRow = document.querySelector(`tr[data-entry-id="${entryId}"]`);
+            if (entryRow) {
+                const docList = entryRow.querySelector('.document-list');
+                if (docList && docList.children.length === 0) {
+                    docList.parentElement.innerHTML = 'No documents';
+                }
+            }
+            
+            console.log('Document deleted successfully');
+        } else {
+            alert('Error deleting document: ' + (result.message || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Delete error:', error);
+        alert('Error deleting document. Please try again.');
     }
 }
+
+// Delete document from edit modal
+async function deleteDocumentFromModal(docId, entryId) {
+    if (!confirm('Are you sure you want to delete this document?')) {
+        return;
+    }
+    
+    try {
+        const formData = new FormData();
+        formData.append('delete_document', '1');
+        formData.append('document_id', docId);
+        
+        const response = await fetch('ajax_delete_document.php', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Reload the documents in the modal
+            await loadExistingDocuments(entryId);
+            
+            console.log('Document deleted from modal successfully');
+        } else {
+            alert('Error deleting document: ' + (result.message || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Delete error:', error);
+        alert('Error deleting document. Please try again.');
+    }
+}
+
+// ===== UTILITY FUNCTIONS =====
+
+// Format file size for display
+function formatFileSize(bytes) {
+    if (bytes === 0 || bytes === '0' || !bytes) return '0 Bytes';
+    
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+}
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Export for global access (needed for inline onclick handlers)
+window.deleteDocumentFromModal = deleteDocumentFromModal;
+window.formatFileSize = formatFileSize;
