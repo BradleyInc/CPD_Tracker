@@ -27,6 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_personal_goal'
         $description = trim($_POST['goal_description'] ?? '');
         $target_hours = floatval($_POST['target_hours'] ?? 0);
         $target_entries = !empty($_POST['target_entries']) ? intval($_POST['target_entries']) : null;
+        $target_points = !empty($_POST['target_points']) ? floatval($_POST['target_points']) : null;
         $deadline = $_POST['deadline'] ?? '';
         
         // Validation
@@ -50,6 +51,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_personal_goal'
             $error_messages[] = "Target entries must be between 1 and 100";
         }
         
+        // Add points validation
+        if ($target_points !== null && ($target_points < 0 || $target_points > 9999.99)) {
+            $error_messages[] = "Target points must be between 0 and 9999.99";
+        }
+        
         if (empty($deadline)) {
             $error_messages[] = "Deadline is required";
         } else {
@@ -65,6 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_personal_goal'
                 'description' => !empty($description) ? htmlspecialchars($description) : null,
                 'target_hours' => $target_hours,
                 'target_entries' => $target_entries,
+                'target_points' => $target_points, // NEW
                 'deadline' => $deadline
             ];
             
@@ -77,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_personal_goal'
             }
         }
     } else {
-        $error_messages[] = "Goal not found or you don't have permission to edit it.";
+        $error_messages[] = "Goal not found or you don't have permission to update it.";
     }
 }
 
@@ -109,6 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_personal_goal'
     $description = trim($_POST['goal_description'] ?? '');
     $target_hours = floatval($_POST['target_hours'] ?? 0);
     $target_entries = !empty($_POST['target_entries']) ? intval($_POST['target_entries']) : null;
+    $target_points = !empty($_POST['target_points']) ? floatval($_POST['target_points']) : null;
     $deadline = $_POST['deadline'] ?? '';
     
     // Validation
@@ -131,7 +139,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_personal_goal'
     if ($target_entries !== null && ($target_entries <= 0 || $target_entries > 100)) {
         $error_messages[] = "Target entries must be between 1 and 100";
     }
-    
+	
+    if ($target_points !== null && ($target_points < 0 || $target_points > 9999.99)) {
+        $error_messages[] = "Target points must be between 0 and 9999.99";
+    }
+	
     if (empty($deadline)) {
         $error_messages[] = "Deadline is required";
     } else {
@@ -152,11 +164,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_personal_goal'
             'target_user_id' => $_SESSION['user_id'],
             'target_team_id' => null,
             'target_department_id' => null,
-            'set_by' => $_SESSION['user_id'], // User sets their own goal
+            'set_by' => $_SESSION['user_id'],
             'title' => htmlspecialchars($title),
             'description' => !empty($description) ? htmlspecialchars($description) : null,
             'target_hours' => $target_hours,
             'target_entries' => $target_entries,
+            'target_points' => $target_points, // NEW
             'deadline' => $deadline
         ];
         
@@ -164,7 +177,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_personal_goal'
         
         if ($goal_id) {
             $success_message = "Personal goal created successfully!";
-            // Redirect to refresh the page and show the new goal
             header("Location: user_goals.php?success=created");
             exit();
         } else {
@@ -282,6 +294,14 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
                                value="<?php echo isset($_POST['target_entries']) ? htmlspecialchars($_POST['target_entries']) : ''; ?>">
                         <small>Leave blank if not tracking entries</small>
                     </div>
+					
+					<div class="form-group">
+						<label for="target_points">Target Points (optional):</label>
+						<input type="number" id="target_points" name="target_points" 
+							   min="0" max="9999.99" step="0.01" placeholder="e.g., 25.5"
+							   value="<?php echo isset($_POST['target_points']) ? htmlspecialchars($_POST['target_points']) : ''; ?>">
+						<small>Optional CPD points target</small>
+					</div>
                     
                     <div class="form-group">
                         <label for="deadline">Deadline: *</label>
@@ -366,11 +386,15 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
                             <div class="progress-bar-fill personal" style="width: <?php echo min($progress, 100); ?>%"></div>
                         </div>
                         <div class="progress-stats">
-                            <span><?php echo $goal['current_hours'] ?? 0; ?> / <?php echo $goal['target_hours']; ?> hours</span>
-                            <?php if ($goal['target_entries']): ?>
-                                <span><?php echo $goal['current_entries'] ?? 0; ?> / <?php echo $goal['target_entries']; ?> entries</span>
-                            <?php endif; ?>
-                        </div>
+							<span><?php echo $goal['current_hours'] ?? 0; ?> / <?php echo $goal['target_hours']; ?> hours</span>
+							<?php if ($goal['target_entries']): ?>
+								<span><?php echo $goal['current_entries'] ?? 0; ?> / <?php echo $goal['target_entries']; ?> entries</span>
+							<?php endif; ?>
+							<!-- Display points if target is set -->
+							<?php if ($goal['target_points'] !== null && $goal['target_points'] > 0): ?>
+								<span><?php echo $goal['current_points'] ?? 0; ?> / <?php echo $goal['target_points']; ?> pts</span>
+							<?php endif; ?>
+						</div>
                     </div>
 
                     <div class="goal-footer">
@@ -401,6 +425,7 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
 									data-goal-description="<?php echo htmlspecialchars($goal['description'] ?? ''); ?>"
 									data-goal-hours="<?php echo htmlspecialchars($goal['target_hours']); ?>"
 									data-goal-entries="<?php echo htmlspecialchars($goal['target_entries'] ?? ''); ?>"
+									data-goal-points="<?php echo htmlspecialchars($goal['target_points'] ?? ''); ?>"
 									data-goal-deadline="<?php echo htmlspecialchars($goal['deadline']); ?>"
 									onclick="openEditGoalModalFromData(this); return false;">
 								✏️ Edit
@@ -723,6 +748,13 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
                     <input type="number" id="edit_target_entries" name="target_entries" 
                            min="1" max="100">
                 </div>
+				
+				<div class="form-group">
+					<label for="edit_target_points">Target Points (optional):</label>
+					<input type="number" id="edit_target_points" name="target_points" 
+						   min="0" max="9999.99" step="0.01" placeholder="e.g., 25.5">
+					<small>Optional CPD points target</small>
+				</div>
                 
                 <div class="form-group">
                     <label for="edit_deadline">Deadline: *</label>
@@ -1243,6 +1275,23 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
             justify-content: flex-end;
         }
     }
+	
+    .form-row:has(.form-group:nth-child(4)) {
+        grid-template-columns: repeat(4, 1fr);
+    }
+    
+    @media (max-width: 992px) {
+        .form-row:has(.form-group:nth-child(4)) {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .form-row:has(.form-group:nth-child(3)),
+        .form-row:has(.form-group:nth-child(4)) {
+            grid-template-columns: 1fr;
+        }
+    }
 </style>
 
 <script>
@@ -1256,6 +1305,7 @@ function openEditGoalModal(goal) {
         document.getElementById('edit_goal_description').value = goal.description || '';
         document.getElementById('edit_target_hours').value = goal.target_hours;
         document.getElementById('edit_target_entries').value = goal.target_entries || '';
+		document.getElementById('edit_target_points').value = goal.target_points || '';
         document.getElementById('edit_deadline').value = goal.deadline;
         
         document.getElementById('editGoalModal').style.display = 'block';
@@ -1273,6 +1323,7 @@ function openEditGoalModalFromData(button) {
         description: button.getAttribute('data-goal-description'),
         target_hours: button.getAttribute('data-goal-hours'),
         target_entries: button.getAttribute('data-goal-entries'),
+		target_points: button.getAttribute('data-goal-points'),
         deadline: button.getAttribute('data-goal-deadline')
     };
     

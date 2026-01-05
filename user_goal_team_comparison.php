@@ -56,17 +56,20 @@ foreach ($progress_details as $participant) {
 $total_participants = count($progress_details);
 $team_total_hours = 0;
 $team_total_entries = 0;
+$team_total_points = 0;
 $completed_count = 0;
 
 foreach ($progress_details as $participant) {
     $team_total_hours += $participant['current_hours'] ?? 0;
     $team_total_entries += $participant['current_entries'] ?? 0;
+	$team_total_points += $participant['current_points'] ?? 0;
     if (($participant['progress_percentage'] ?? 0) >= 100) {
         $completed_count++;
     }
 }
 
 $team_avg_hours = $total_participants > 0 ? $team_total_hours / $total_participants : 0;
+$team_avg_points = $total_participants > 0 ? $team_total_points / $total_participants : 0;
 $team_avg_progress = $total_participants > 0 ? array_sum(array_column($progress_details, 'progress_percentage')) / $total_participants : 0;
 
 // Sort by progress
@@ -126,6 +129,12 @@ include 'includes/header.php';
                 <span class="value"><?php echo $goal['target_entries']; ?> entries</span>
             </div>
             <?php endif; ?>
+			<?php if ($goal['target_points'] !== null && $goal['target_points'] > 0): ?>
+			<div class="target-item">
+				<span class="label">Target Points:</span>
+				<span class="value"><?php echo $goal['target_points']; ?> pts</span>
+			</div>
+			<?php endif; ?>
             <div class="target-item">
                 <span class="label">Deadline:</span>
                 <span class="value"><?php echo date('M d, Y', strtotime($goal['deadline'])); ?></span>
@@ -158,6 +167,12 @@ include 'includes/header.php';
                         <div class="stat-value"><?php echo $user_progress['current_entries'] ?? 0; ?></div>
                         <div class="stat-label">Entries</div>
                     </div>
+					<?php if ($goal['target_points'] !== null && $goal['target_points'] > 0): ?>
+					<div class="stat">
+						<div class="stat-value"><?php echo $user_progress['current_points'] ?? 0; ?></div>
+						<div class="stat-label">Points</div>
+					</div>
+					<?php endif; ?>
                 </div>
                 
                 <div class="progress-bar-large">
@@ -191,13 +206,23 @@ include 'includes/header.php';
                         <div class="stat-value"><?php echo $total_participants; ?></div>
                         <div class="stat-label">Team Members</div>
                     </div>
+					<?php if ($goal['target_points'] !== null && $goal['target_points'] > 0): ?>
+					<div class="stat">
+						<div class="stat-value"><?php echo round($team_avg_points, 1); ?></div>
+						<div class="stat-label">Avg Points</div>
+					</div>
+					<?php endif; ?>
                 </div>
                 
                 <div class="progress-bar-large">
                     <div class="progress-fill-large team" style="width: <?php echo min($team_avg_progress, 100); ?>%"></div>
                 </div>
                 
-                <p class="team-total">Total team hours: <?php echo round($team_total_hours, 1); ?></p>
+                <p class="team-total">Total team hours: <?php echo round($team_total_hours, 1); ?>
+				<?php if ($goal['target_points'] !== null && $goal['target_points'] > 0): ?>
+					| Total points: <?php echo round($team_total_points, 1); ?>
+				<?php endif; ?>
+				</p>
             </div>
 
             <!-- Comparison Insights -->
@@ -207,10 +232,14 @@ include 'includes/header.php';
                 </div>
                 
                 <?php
-                $user_prog = $user_progress['progress_percentage'] ?? 0;
-                $diff_from_avg = $user_prog - $team_avg_progress;
-                $diff_from_target = $goal['target_hours'] - ($user_progress['current_hours'] ?? 0);
-                ?>
+				$user_prog = $user_progress['progress_percentage'] ?? 0;
+				$diff_from_avg = $user_prog - $team_avg_progress;
+				$diff_from_target = $goal['target_hours'] - ($user_progress['current_hours'] ?? 0);
+				$points_diff = null;
+				if ($goal['target_points'] !== null && $goal['target_points'] > 0) {
+					$points_diff = $goal['target_points'] - ($user_progress['current_points'] ?? 0); // NEW
+				}
+				?>
                 
                 <div class="insights-list">
                     <?php if ($user_prog >= 100): ?>
@@ -254,6 +283,21 @@ include 'includes/header.php';
                             <span>Average <?php echo round($hours_per_day, 1); ?> hours/day needed</span>
                         </div>
                     <?php endif; ?>
+					
+					<?php if ($points_diff !== null && $points_diff > 0): ?>
+						<div class="insight info">
+							<span class="icon">⭐</span>
+							<span><?php echo round($points_diff, 1); ?> points to reach your target</span>
+						</div>
+					<?php endif; ?>
+					
+					<?php if ($goal['days_remaining'] > 0 && $diff_from_target > 0): ?>
+						<?php $hours_per_day = $diff_from_target / $goal['days_remaining']; ?>
+						<div class="insight info">
+							<span class="icon">📅</span>
+							<span>Average <?php echo round($hours_per_day, 1); ?> hours/day needed</span>
+						</div>
+					<?php endif; ?>
                     
                     <div class="insight info">
                         <span class="icon">🏅</span>
@@ -276,6 +320,9 @@ include 'includes/header.php';
                         <th>Team Member</th>
                         <th>Hours</th>
                         <th>Entries</th>
+						<?php if ($goal['target_points'] !== null && $goal['target_points'] > 0): ?>
+						<th>Points</th>
+						<?php endif; ?>
                         <th>Progress</th>
                         <th>Last Entry</th>
                     </tr>
@@ -319,6 +366,9 @@ include 'includes/header.php';
                             </td>
                             <td><?php echo $participant['current_hours'] ?? 0; ?> / <?php echo $goal['target_hours']; ?></td>
                             <td><?php echo $participant['current_entries'] ?? 0; ?></td>
+							<?php if ($goal['target_points'] !== null && $goal['target_points'] > 0): ?>
+							<td><?php echo $participant['current_points'] ?? 0; ?> / <?php echo $goal['target_points']; ?></td>
+							<?php endif; ?>
                             <td>
                                 <div class="progress-cell">
                                     <div class="mini-progress-bar">
@@ -755,6 +805,18 @@ include 'includes/header.php';
             overflow-x: auto;
         }
     }
+    .progress-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    @media (max-width: 768px) {
+        .progress-stats {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }	
 </style>
 
 <?php include 'includes/footer.php'; ?>
