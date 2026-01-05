@@ -7,8 +7,8 @@
 function createGoal($pdo, $data) {
     $stmt = $pdo->prepare("
         INSERT INTO cpd_goals 
-        (goal_type, target_user_id, target_team_id, target_department_id, set_by, title, description, target_hours, target_entries, deadline)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (goal_type, target_user_id, target_team_id, target_department_id, set_by, title, description, target_hours, target_entries, target_points, deadline)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     
     $result = $stmt->execute([
@@ -21,6 +21,7 @@ function createGoal($pdo, $data) {
         $data['description'] ?? null,
         $data['target_hours'],
         $data['target_entries'] ?? null,
+        $data['target_points'] ?? null,
         $data['deadline']
     ]);
     
@@ -64,6 +65,7 @@ function getUserGoals($pdo, $user_id, $status = null) {
             u.username as set_by_name,
             gp.current_hours,
             gp.current_entries,
+            gp.current_points,
             gp.progress_percentage,
             gp.last_entry_date,
             DATEDIFF(g.deadline, CURDATE()) as days_remaining,
@@ -221,6 +223,7 @@ function getTeamGoalProgress($pdo, $goal_id) {
             u.username,
             gp.current_hours,
             gp.current_entries,
+            gp.current_points,
             gp.progress_percentage,
             gp.last_entry_date
         FROM goal_progress gp
@@ -270,7 +273,7 @@ function getGoalById($pdo, $goal_id) {
 function updateGoal($pdo, $goal_id, $data) {
     $stmt = $pdo->prepare("
         UPDATE cpd_goals 
-        SET title = ?, description = ?, target_hours = ?, target_entries = ?, deadline = ?
+        SET title = ?, description = ?, target_hours = ?, target_entries = ?, target_points = ?, deadline = ?
         WHERE id = ?
     ");
     
@@ -279,6 +282,7 @@ function updateGoal($pdo, $goal_id, $data) {
         $data['description'] ?? null,
         $data['target_hours'],
         $data['target_entries'] ?? null,
+        $data['target_points'] ?? null,
         $data['deadline'],
         $goal_id
     ]);
@@ -542,6 +546,69 @@ function getGoalTemplateById($pdo, $template_id) {
 }
 
 /**
+ * Validate goal data including points
+ */
+function validateGoalData($data) {
+    $errors = [];
+    
+    // Title validation
+    $title = trim($data['goal_title'] ?? '');
+    if (empty($title)) {
+        $errors[] = "Goal title is required";
+    } elseif (strlen($title) > 255) {
+        $errors[] = "Title cannot exceed 255 characters";
+    }
+    
+    // Description validation
+    $description = trim($data['goal_description'] ?? '');
+    if (strlen($description) > 1000) {
+        $errors[] = "Description cannot exceed 1000 characters";
+    }
+    
+    // Target hours validation
+    $target_hours = floatval($data['target_hours'] ?? 0);
+    if ($target_hours <= 0) {
+        $errors[] = "Target hours must be greater than 0";
+    } elseif ($target_hours > 500) {
+        $errors[] = "Target hours cannot exceed 500";
+    }
+    
+    // Target entries validation (optional)
+    if (isset($data['target_entries']) && !empty($data['target_entries'])) {
+        $target_entries = intval($data['target_entries']);
+        if ($target_entries <= 0 || $target_entries > 100) {
+            $errors[] = "Target entries must be between 1 and 100";
+        }
+    }
+    
+    // Target points validation (optional)
+    if (isset($data['target_points']) && $data['target_points'] !== '' && $data['target_points'] !== null) {
+        $target_points = floatval($data['target_points']);
+        if ($target_points < 0) {
+            $errors[] = "Target points cannot be negative";
+        } elseif ($target_points > 9999.99) {
+            $errors[] = "Target points cannot exceed 9999.99";
+        }
+    }
+    
+    // Deadline validation
+    if (empty($data['deadline'])) {
+        $errors[] = "Deadline is required";
+    } else {
+        $deadline_date = DateTime::createFromFormat('Y-m-d', $data['deadline']);
+        if (!$deadline_date || $deadline_date->format('Y-m-d') !== $data['deadline']) {
+            $errors[] = "Invalid deadline format";
+        } elseif (strtotime($data['deadline']) < strtotime('today')) {
+            $errors[] = "Deadline cannot be in the past";
+        } elseif (strtotime($data['deadline']) > strtotime('+5 years')) {
+            $errors[] = "Deadline cannot be more than 5 years in the future";
+        }
+    }
+    
+    return $errors;
+}
+
+/**
  * Create goal from template
  */
 function createGoalFromTemplate($pdo, $template_id, $target_data, $set_by) {
@@ -562,6 +629,7 @@ function createGoalFromTemplate($pdo, $template_id, $target_data, $set_by) {
         'description' => $template['description'],
         'target_hours' => $template['target_hours'],
         'target_entries' => $template['target_entries'],
+        'target_points' => $template['target_points'] ?? null,
         'deadline' => $deadline
     ];
     
