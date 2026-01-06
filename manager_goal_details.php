@@ -35,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'description' => trim($_POST['description']),
             'target_hours' => floatval($_POST['target_hours']),
             'target_entries' => !empty($_POST['target_entries']) ? intval($_POST['target_entries']) : null,
+            'target_points' => !empty($_POST['target_points']) ? floatval($_POST['target_points']) : null,
             'deadline' => $_POST['deadline']
         ];
         
@@ -72,28 +73,14 @@ if (!$goal) {
     exit();
 }
 
-// Get progress details based on goal type
+// Get progress details with time-based status
 $progress_details = [];
 if ($goal['goal_type'] === 'team' || $goal['goal_type'] === 'department') {
-    $progress_details = getTeamGoalProgress($pdo, $goal_id);
+    $progress_details = getTeamGoalProgressWithTimeStatus($pdo, $goal_id);
 }
 
-// Calculate statistics
-$total_participants = count($progress_details);
-$on_track = 0;
-$behind = 0;
-$completed = 0;
-
-foreach ($progress_details as $participant) {
-    $progress = $participant['progress_percentage'] ?? 0;
-    if ($progress >= 100) {
-        $completed++;
-    } elseif ($progress >= 70) {
-        $on_track++;
-    } else {
-        $behind++;
-    }
-}
+// Calculate statistics using the new time-based approach
+$stats = calculateGoalStatistics($goal, $progress_details);
 ?>
 
 <div class="container">
@@ -173,28 +160,52 @@ foreach ($progress_details as $participant) {
         </div>
     </div>
 
-    <!-- Goal Statistics -->
+    <!-- Goal Statistics with Time-Based Categories -->
     <?php if ($goal['goal_type'] === 'team' || $goal['goal_type'] === 'department'): ?>
     <div class="stats-grid">
         <div class="stat-card">
             <h3>Total Participants</h3>
-            <p class="stat-number"><?php echo $total_participants; ?></p>
+            <p class="stat-number"><?php echo $stats['total_participants']; ?></p>
         </div>
         <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white;">
             <h3 style="color: white;">Completed</h3>
-            <p class="stat-number"><?php echo $completed; ?></p>
-            <small style="color: white;"><?php echo $total_participants > 0 ? round(($completed / $total_participants) * 100, 1) : 0; ?>% of team</small>
+            <p class="stat-number"><?php echo $stats['completed']; ?></p>
+            <small style="color: white;"><?php echo $stats['total_participants'] > 0 ? round(($stats['completed'] / $stats['total_participants']) * 100, 1) : 0; ?>% of team</small>
         </div>
         <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
             <h3 style="color: white;">On Track</h3>
-            <p class="stat-number"><?php echo $on_track; ?></p>
-            <small style="color: white;">70%+ progress</small>
+            <p class="stat-number"><?php echo $stats['on_track']; ?></p>
+            <small style="color: white;">Meeting time expectations</small>
+        </div>
+        <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
+            <h3 style="color: white;">Needs Attention</h3>
+            <p class="stat-number"><?php echo $stats['moderate']; ?></p>
+            <small style="color: white;">Falling slightly behind</small>
         </div>
         <div class="stat-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white;">
-            <h3 style="color: white;">Behind</h3>
-            <p class="stat-number"><?php echo $behind; ?></p>
-            <small style="color: white;">Need attention</small>
+            <h3 style="color: white;">Behind Schedule</h3>
+            <p class="stat-number"><?php echo $stats['behind']; ?></p>
+            <small style="color: white;">Significantly behind</small>
         </div>
+        <?php if ($stats['critical'] > 0): ?>
+        <div class="stat-card" style="background: linear-gradient(135deg, #ff6b6b 0%, #ff8e8e 100%); color: white;">
+            <h3 style="color: white;">Critical</h3>
+            <p class="stat-number"><?php echo $stats['critical']; ?></p>
+            <small style="color: white;">Urgent intervention needed</small>
+        </div>
+        <?php endif; ?>
+    </div>
+    
+    <!-- Time-based Progress Explanation -->
+    <div class="progress-explanation">
+        <h3>📊 Time-Based Progress Tracking</h3>
+        <p>Progress status is calculated based on time elapsed. For example, if 50% of the goal period has passed, we expect at least 50% progress toward the target hours.</p>
+        <ul>
+            <li><strong>On Track:</strong> Progress matches or exceeds expected progress based on time elapsed (within 5% tolerance)</li>
+            <li><strong>Needs Attention:</strong> Progress is 5-15% behind expected progress</li>
+            <li><strong>Behind Schedule:</strong> Progress is more than 15% behind expected progress</li>
+            <li><strong>Critical:</strong> Less than 20% of time remaining with less than 70% progress</li>
+        </ul>
     </div>
     <?php endif; ?>
 
@@ -210,7 +221,9 @@ foreach ($progress_details as $participant) {
                         <th>Team Member</th>
                         <th>Current Hours</th>
                         <th>Target Hours</th>
-                        <th>Progress</th>
+                        <th>Actual Progress</th>
+                        <th>Expected Progress</th>
+                        <th>Variance</th>
                         <th>Status</th>
                         <th>Last Entry</th>
                     </tr>
@@ -219,22 +232,10 @@ foreach ($progress_details as $participant) {
                     <?php foreach ($progress_details as $participant): ?>
                         <?php
                         $progress = $participant['progress_percentage'] ?? 0;
-                        $status_class = '';
-                        $status_text = '';
-                        
-                        if ($progress >= 100) {
-                            $status_class = 'completed';
-                            $status_text = 'Completed';
-                        } elseif ($progress >= 70) {
-                            $status_class = 'on-track';
-                            $status_text = 'On Track';
-                        } elseif ($progress >= 40) {
-                            $status_class = 'moderate';
-                            $status_text = 'Moderate';
-                        } else {
-                            $status_class = 'behind';
-                            $status_text = 'Behind';
-                        }
+                        $status_class = $participant['status_class'];
+                        $status_text = $participant['status_text'];
+                        $expected = $participant['expected_progress'] ?? 0;
+                        $variance = $participant['variance'] ?? 0;
                         ?>
                         <tr class="<?php echo $status_class; ?>-row">
                             <td><strong><?php echo htmlspecialchars($participant['username']); ?></strong></td>
@@ -248,6 +249,14 @@ foreach ($progress_details as $participant) {
                                     </div>
                                     <span class="progress-text"><?php echo round($progress, 1); ?>%</span>
                                 </div>
+                            </td>
+                            <td>
+                                <span class="expected-progress"><?php echo round($expected, 1); ?>%</span>
+                            </td>
+                            <td>
+                                <span class="variance-badge <?php echo $variance >= 0 ? 'positive' : 'negative'; ?>">
+                                    <?php echo $variance >= 0 ? '+' : ''; ?><?php echo round($variance, 1); ?>%
+                                </span>
                             </td>
                             <td>
                                 <span class="status-indicator <?php echo $status_class; ?>">
@@ -349,59 +358,6 @@ foreach ($progress_details as $participant) {
             <?php endif; ?>
         </div>
 
-<!-- Additional CSS -->
-<style>
-    .edit-disabled-notice {
-        background: #fff3cd;
-        border-left: 4px solid #ffc107;
-        padding: 1.5rem;
-        border-radius: 4px;
-        margin-bottom: 1.5rem;
-    }
-    
-    .edit-disabled-notice p {
-        margin: 0;
-    }
-    
-    .edit-disabled-notice p:first-child {
-        margin-bottom: 0.75rem;
-        color: #856404;
-        font-size: 1.1rem;
-    }
-    
-    .edit-disabled-notice p:last-child {
-        color: #856404;
-        line-height: 1.5;
-    }
-    
-    .read-only-goal-info {
-        background: #f8f9fa;
-        padding: 1.5rem;
-        border-radius: 8px;
-    }
-    
-    .info-row {
-        display: flex;
-        padding: 0.75rem 0;
-        border-bottom: 1px solid #dee2e6;
-    }
-    
-    .info-row:last-child {
-        border-bottom: none;
-    }
-    
-    .info-label {
-        font-weight: 600;
-        color: #495057;
-        min-width: 150px;
-    }
-    
-    .info-value {
-        color: #212529;
-        flex: 1;
-    }
-</style>
-
         <!-- Goal Actions -->
         <div class="admin-section">
             <h2>Goal Actions</h2>
@@ -449,43 +405,8 @@ foreach ($progress_details as $participant) {
                 </a>
             </div>
         </div>
-
-<!-- Additional CSS -->
-<style>
-    .personal-goal-notice {
-        margin-top: 1rem;
-        padding: 1rem;
-        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-        border-left: 4px solid #28a745;
-        border-radius: 4px;
-    }
-    
-    .personal-goal-notice strong {
-        display: block;
-        color: #155724;
-        margin-bottom: 0.5rem;
-        font-size: 1.1rem;
-    }
-    
-    .personal-goal-notice p {
-        color: #155724;
-        margin: 0;
-        line-height: 1.5;
-    }
-    
-    .info-notice {
-        padding: 1rem;
-        background: #e7f3ff;
-        border-left: 4px solid #007cba;
-        border-radius: 4px;
-        margin-bottom: 1rem;
-    }
-    
-    .info-notice p {
-        margin: 0;
-        color: #004085;
-    }
-</style>
+    </div>
+</div>
 
 <style>
     .goal-detail-header {
@@ -588,6 +509,34 @@ foreach ($progress_details as $participant) {
         opacity: 0.9;
     }
     
+    .progress-explanation {
+        background: linear-gradient(135deg, #e3f2fd 0%, #e8f5e9 100%);
+        padding: 1.5rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        border-left: 4px solid #1976d2;
+    }
+    
+    .progress-explanation h3 {
+        margin-top: 0;
+        color: #1976d2;
+    }
+    
+    .progress-explanation p {
+        color: #2c3e50;
+        margin-bottom: 1rem;
+    }
+    
+    .progress-explanation ul {
+        margin: 0;
+        padding-left: 1.5rem;
+    }
+    
+    .progress-explanation li {
+        color: #2c3e50;
+        margin-bottom: 0.5rem;
+    }
+    
     .progress-table {
         margin-top: 1.5rem;
     }
@@ -629,11 +578,43 @@ foreach ($progress_details as $participant) {
         background: linear-gradient(90deg, #fa709a 0%, #fee140 100%);
     }
     
+    .progress-fill-mini.critical {
+        background: linear-gradient(90deg, #ff6b6b 0%, #ff8e8e 100%);
+    }
+    
+    .progress-fill-mini.overdue {
+        background: linear-gradient(90deg, #ff4757 0%, #ff6348 100%);
+    }
+    
     .progress-text {
         font-weight: 600;
         color: #2c3e50;
         min-width: 60px;
         text-align: right;
+    }
+    
+    .expected-progress {
+        font-weight: 600;
+        color: #666;
+        font-size: 0.95rem;
+    }
+    
+    .variance-badge {
+        padding: 0.25rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 700;
+        display: inline-block;
+    }
+    
+    .variance-badge.positive {
+        background: #d4edda;
+        color: #155724;
+    }
+    
+    .variance-badge.negative {
+        background: #f8d7da;
+        color: #721c24;
     }
     
     .status-indicator {
@@ -664,6 +645,18 @@ foreach ($progress_details as $participant) {
         color: #721c24;
     }
     
+    .status-indicator.critical {
+        background: #ffcccc;
+        color: #991111;
+        font-weight: 700;
+    }
+    
+    .status-indicator.overdue {
+        background: #ff4444;
+        color: white;
+        font-weight: 700;
+    }
+    
     .completed-row {
         background: #f0fff0;
     }
@@ -678,6 +671,16 @@ foreach ($progress_details as $participant) {
     
     .behind-row {
         background: #fff5f5;
+    }
+    
+    .critical-row {
+        background: #ffe6e6;
+        border-left: 3px solid #ff4444;
+    }
+    
+    .overdue-row {
+        background: #ffdddd;
+        border-left: 3px solid #cc0000;
     }
     
     .goal-management-grid {
@@ -717,6 +720,90 @@ foreach ($progress_details as $participant) {
         gap: 1rem;
     }
     
+    .edit-disabled-notice {
+        background: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 1.5rem;
+        border-radius: 4px;
+        margin-bottom: 1.5rem;
+    }
+    
+    .edit-disabled-notice p {
+        margin: 0;
+    }
+    
+    .edit-disabled-notice p:first-child {
+        margin-bottom: 0.75rem;
+        color: #856404;
+        font-size: 1.1rem;
+    }
+    
+    .edit-disabled-notice p:last-child {
+        color: #856404;
+        line-height: 1.5;
+    }
+    
+    .read-only-goal-info {
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 8px;
+    }
+    
+    .info-row {
+        display: flex;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .info-row:last-child {
+        border-bottom: none;
+    }
+    
+    .info-label {
+        font-weight: 600;
+        color: #495057;
+        min-width: 150px;
+    }
+    
+    .info-value {
+        color: #212529;
+        flex: 1;
+    }
+    
+    .personal-goal-notice {
+        margin-top: 1rem;
+        padding: 1rem;
+        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+        border-left: 4px solid #28a745;
+        border-radius: 4px;
+    }
+    
+    .personal-goal-notice strong {
+        display: block;
+        color: #155724;
+        margin-bottom: 0.5rem;
+        font-size: 1.1rem;
+    }
+    
+    .personal-goal-notice p {
+        color: #155724;
+        margin: 0;
+        line-height: 1.5;
+    }
+    
+    .info-notice {
+        padding: 1rem;
+        background: #e7f3ff;
+        border-left: 4px solid #007cba;
+        border-radius: 4px;
+        margin-bottom: 1rem;
+    }
+    
+    .info-notice p {
+        margin: 0;
+        color: #004085;
+    }
+    
     @media (max-width: 992px) {
         .goal-detail-header {
             grid-template-columns: 1fr;
@@ -728,6 +815,10 @@ foreach ($progress_details as $participant) {
         
         .deadline-box {
             min-width: auto;
+        }
+        
+        .progress-table {
+            font-size: 0.9rem;
         }
     }
 </style>
