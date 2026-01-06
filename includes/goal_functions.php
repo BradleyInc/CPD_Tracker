@@ -779,4 +779,156 @@ function updateAllGoalProgress($pdo) {
     
     return $updated;
 }
+
+/**
+ * Calculate time-based progress status for a goal
+ * Returns array with status info based on time elapsed vs progress made
+ */
+function calculateTimeBasedStatus($goal, $current_progress_percentage) {
+    // If completed, always return completed status
+    if ($current_progress_percentage >= 100) {
+        return [
+            'status_class' => 'completed',
+            'status_text' => 'Completed',
+            'expected_progress' => 100,
+            'variance' => $current_progress_percentage - 100
+        ];
+    }
+    
+    // Calculate time elapsed percentage
+    $start_date = new DateTime($goal['created_at']);
+    $deadline = new DateTime($goal['deadline']);
+    $now = new DateTime();
+    
+    // Handle edge cases
+    if ($now < $start_date) {
+        // Goal hasn't started yet
+        return [
+            'status_class' => 'not-started',
+            'status_text' => 'Not Started',
+            'expected_progress' => 0,
+            'variance' => $current_progress_percentage
+        ];
+    }
+    
+    if ($now > $deadline) {
+        // Goal is overdue
+        if ($current_progress_percentage >= 90) {
+            return [
+                'status_class' => 'nearly-complete',
+                'status_text' => 'Nearly Complete',
+                'expected_progress' => 100,
+                'variance' => $current_progress_percentage - 100
+            ];
+        } else {
+            return [
+                'status_class' => 'overdue',
+                'status_text' => 'Overdue',
+                'expected_progress' => 100,
+                'variance' => $current_progress_percentage - 100
+            ];
+        }
+    }
+    
+    // Calculate total days and days elapsed
+    $total_days = $start_date->diff($deadline)->days;
+    $days_elapsed = $start_date->diff($now)->days;
+    
+    // Calculate expected progress based on time elapsed
+    $time_percentage = ($total_days > 0) ? ($days_elapsed / $total_days) * 100 : 0;
+    
+    // Calculate variance (how far ahead or behind expected progress)
+    $variance = $current_progress_percentage - $time_percentage;
+    
+    // Categorize based on variance
+    if ($variance >= -5) {
+        // Within 5% of expected or ahead
+        $status_class = 'on-track';
+        $status_text = 'On Track';
+    } elseif ($variance >= -15) {
+        // 5-15% behind expected
+        $status_class = 'moderate';
+        $status_text = 'Needs Attention';
+    } else {
+        // More than 15% behind expected
+        $status_class = 'behind';
+        $status_text = 'Behind Schedule';
+    }
+    
+    // Special case: if we're near the deadline (last 20% of time) and not close to completion
+    $days_remaining = $now->diff($deadline)->days;
+    if (($days_remaining / $total_days) <= 0.2 && $current_progress_percentage < 70) {
+        $status_class = 'critical';
+        $status_text = 'Critical';
+    }
+    
+    return [
+        'status_class' => $status_class,
+        'status_text' => $status_text,
+        'expected_progress' => round($time_percentage, 1),
+        'variance' => round($variance, 1),
+        'time_elapsed_percentage' => round($time_percentage, 1),
+        'days_remaining' => $days_remaining,
+        'days_total' => $total_days
+    ];
+}
+
+/**
+ * Get detailed progress statistics for team goals with time-based categorization
+ */
+function getTeamGoalProgressWithTimeStatus($pdo, $goal_id) {
+    // Get the goal details first
+    $goal = getGoalById($pdo, $goal_id);
+    if (!$goal) {
+        return [];
+    }
+    
+    // Get basic progress data
+    $progress_details = getTeamGoalProgress($pdo, $goal_id);
+    
+    // Enhance each participant's data with time-based status
+    foreach ($progress_details as &$participant) {
+        $progress = $participant['progress_percentage'] ?? 0;
+        $status_info = calculateTimeBasedStatus($goal, $progress);
+        
+        $participant['status_class'] = $status_info['status_class'];
+        $participant['status_text'] = $status_info['status_text'];
+        $participant['expected_progress'] = $status_info['expected_progress'];
+        $participant['variance'] = $status_info['variance'];
+        $participant['time_elapsed_percentage'] = $status_info['time_elapsed_percentage'] ?? null;
+    }
+    
+    return $progress_details;
+}
+
+/**
+ * Calculate statistics for a goal with time-based categorization
+ */
+function calculateGoalStatistics($goal, $progress_details) {
+    $stats = [
+        'total_participants' => count($progress_details),
+        'completed' => 0,
+        'on_track' => 0,
+        'moderate' => 0,
+        'behind' => 0,
+        'critical' => 0,
+        'overdue' => 0,
+        'nearly_complete' => 0
+    ];
+    
+    foreach ($progress_details as $participant) {
+        $progress = $participant['progress_percentage'] ?? 0;
+        $status_info = calculateTimeBasedStatus($goal, $progress);
+        
+        $status_class = $status_info['status_class'];
+        
+        // Increment the appropriate counter
+        if (isset($stats[$status_class])) {
+            $stats[$status_class]++;
+        }
+    }
+    
+    return $stats;
+}
+
 ?>
