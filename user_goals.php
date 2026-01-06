@@ -13,6 +13,46 @@ include 'includes/header.php';
 $success_message = '';
 $error_messages = [];
 
+// Get goal templates for user selection
+$templates = getGoalTemplates($pdo);
+
+// Handle goal creation from template
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_from_template'])) {
+    $template_id = intval($_POST['template_id']);
+    $template = getGoalTemplateById($pdo, $template_id);
+    
+    if ($template) {
+        // Calculate deadline based on template duration
+        $deadline = date('Y-m-d', strtotime("+{$template['duration_days']} days"));
+        
+        $goal_data = [
+            'goal_type' => 'individual',
+            'target_user_id' => $_SESSION['user_id'],
+            'target_team_id' => null,
+            'target_department_id' => null,
+            'set_by' => $_SESSION['user_id'],
+            'title' => $template['name'],
+            'description' => $template['description'],
+            'target_hours' => $template['target_hours'],
+            'target_entries' => $template['target_entries'],
+            'target_points' => $template['target_points'],
+            'deadline' => $deadline
+        ];
+        
+        $goal_id = createGoal($pdo, $goal_data);
+        
+        if ($goal_id) {
+            $success_message = "Personal goal created from template successfully!";
+            header("Location: user_goals.php?success=created_from_template");
+            exit();
+        } else {
+            $error_messages[] = "Failed to create goal from template. Please try again.";
+        }
+    } else {
+        $error_messages[] = "Template not found.";
+    }
+}
+
 // Handle personal goal update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_personal_goal'])) {
     $goal_id = intval($_POST['goal_id']);
@@ -71,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_personal_goal'
                 'description' => !empty($description) ? htmlspecialchars($description) : null,
                 'target_hours' => $target_hours,
                 'target_entries' => $target_entries,
-                'target_points' => $target_points, // NEW
+                'target_points' => $target_points,
                 'deadline' => $deadline
             ];
             
@@ -110,6 +150,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_personal_goal'
     }
 }
 
+// Handle custom personal goal creation
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_personal_goal'])) {
     // Validate input
     $title = trim($_POST['goal_title'] ?? '');
@@ -139,11 +180,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_personal_goal'
     if ($target_entries !== null && ($target_entries <= 0 || $target_entries > 100)) {
         $error_messages[] = "Target entries must be between 1 and 100";
     }
-	
+    
     if ($target_points !== null && ($target_points < 0 || $target_points > 9999.99)) {
         $error_messages[] = "Target points must be between 0 and 9999.99";
     }
-	
+    
     if (empty($deadline)) {
         $error_messages[] = "Deadline is required";
     } else {
@@ -169,7 +210,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_personal_goal'
             'description' => !empty($description) ? htmlspecialchars($description) : null,
             'target_hours' => $target_hours,
             'target_entries' => $target_entries,
-            'target_points' => $target_points, // NEW
+            'target_points' => $target_points,
             'deadline' => $deadline
         ];
         
@@ -189,6 +230,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_personal_goal'
 if (isset($_GET['success'])) {
     if ($_GET['success'] === 'created') {
         $success_message = "Personal goal created successfully!";
+    } elseif ($_GET['success'] === 'created_from_template') {
+        $success_message = "Personal goal created from template successfully!";
     } elseif ($_GET['success'] === 'updated') {
         $success_message = "Personal goal updated successfully!";
     } elseif ($_GET['success'] === 'deleted') {
@@ -259,69 +302,149 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
         </div>
         
         <div id="goalFormContainer" class="goal-form-container" style="display: none;">
-            <form method="POST" action="" class="goal-form">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="goal_title">Goal Title: *</label>
-                        <input type="text" id="goal_title" name="goal_title" required maxlength="255" 
-                               placeholder="e.g., Complete Advanced Excel Training"
-                               value="<?php echo isset($_POST['goal_title']) ? htmlspecialchars($_POST['goal_title']) : ''; ?>">
-                    </div>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="goal_description">Description (optional):</label>
-                        <textarea id="goal_description" name="goal_description" rows="3" maxlength="1000"
-                                  placeholder="Describe what you want to achieve and why..."><?php echo isset($_POST['goal_description']) ? htmlspecialchars($_POST['goal_description']) : ''; ?></textarea>
-                        <small>Max 1000 characters</small>
-                    </div>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="target_hours">Target Hours: *</label>
-                        <input type="number" id="target_hours" name="target_hours" required 
-                               min="0.5" max="500" step="0.5" placeholder="e.g., 20"
-                               value="<?php echo isset($_POST['target_hours']) ? htmlspecialchars($_POST['target_hours']) : ''; ?>">
-                        <small>Between 0.5 and 500 hours</small>
+            <!-- Tab Navigation -->
+            <div class="goal-tabs">
+                <button type="button" class="goal-tab-btn active" onclick="showGoalTab('custom')">Custom Goal</button>
+                <button type="button" class="goal-tab-btn" onclick="showGoalTab('template')">From Template</button>
+            </div>
+
+            <!-- Custom Goal Tab -->
+            <div id="custom-goal-tab" class="goal-tab-content active">
+                <form method="POST" action="" class="goal-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="goal_title">Goal Title: *</label>
+                            <input type="text" id="goal_title" name="goal_title" required maxlength="255" 
+                                   placeholder="e.g., Complete Advanced Excel Training"
+                                   value="<?php echo isset($_POST['goal_title']) ? htmlspecialchars($_POST['goal_title']) : ''; ?>">
+                        </div>
                     </div>
                     
-                    <div class="form-group">
-                        <label for="target_entries">Target Entries (optional):</label>
-                        <input type="number" id="target_entries" name="target_entries" 
-                               min="1" max="100" placeholder="e.g., 5"
-                               value="<?php echo isset($_POST['target_entries']) ? htmlspecialchars($_POST['target_entries']) : ''; ?>">
-                        <small>Leave blank if not tracking entries</small>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="goal_description">Description (optional):</label>
+                            <textarea id="goal_description" name="goal_description" rows="3" maxlength="1000"
+                                      placeholder="Describe what you want to achieve and why..."><?php echo isset($_POST['goal_description']) ? htmlspecialchars($_POST['goal_description']) : ''; ?></textarea>
+                            <small>Max 1000 characters</small>
+                        </div>
                     </div>
-					
-					<div class="form-group">
-						<label for="target_points">Target Points (optional):</label>
-						<input type="number" id="target_points" name="target_points" 
-							   min="0" max="9999.99" step="0.01" placeholder="e.g., 25.5"
-							   value="<?php echo isset($_POST['target_points']) ? htmlspecialchars($_POST['target_points']) : ''; ?>">
-						<small>Optional CPD points target</small>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="target_hours">Target Hours: *</label>
+                            <input type="number" id="target_hours" name="target_hours" required 
+                                   min="0.5" max="500" step="0.5" placeholder="e.g., 20"
+                                   value="<?php echo isset($_POST['target_hours']) ? htmlspecialchars($_POST['target_hours']) : ''; ?>">
+                            <small>Between 0.5 and 500 hours</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="target_entries">Target Entries (optional):</label>
+                            <input type="number" id="target_entries" name="target_entries" 
+                                   min="1" max="100" placeholder="e.g., 5"
+                                   value="<?php echo isset($_POST['target_entries']) ? htmlspecialchars($_POST['target_entries']) : ''; ?>">
+                            <small>Leave blank if not tracking entries</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="target_points">Target Points (optional):</label>
+                            <input type="number" id="target_points" name="target_points" 
+                                   min="0" max="9999.99" step="0.01" placeholder="e.g., 25.5"
+                                   value="<?php echo isset($_POST['target_points']) ? htmlspecialchars($_POST['target_points']) : ''; ?>">
+                            <small>Optional CPD points target</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="deadline">Deadline: *</label>
+                            <input type="date" id="deadline" name="deadline" required
+                                   min="<?php echo date('Y-m-d'); ?>"
+                                   max="<?php echo date('Y-m-d', strtotime('+5 years')); ?>"
+                                   value="<?php echo isset($_POST['deadline']) ? htmlspecialchars($_POST['deadline']) : ''; ?>">
+                            <small>Must be in the future</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" name="create_personal_goal" class="btn">
+                            🎯 Create Custom Goal
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="hideGoalForm()">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Template Goal Tab -->
+			<div id="template-goal-tab" class="goal-tab-content">
+				<form method="POST" action="" class="goal-form">
+					<div class="form-row">
+						<div class="form-group">
+							<label for="template_id">Template: *</label>
+							<select id="template_id" name="template_id" required onchange="showTemplateInfo(this)">
+								<option value="">-- Select Template --</option>
+								<?php foreach ($templates as $template): ?>
+									<option value="<?php echo htmlspecialchars($template['id']); ?>"
+											data-hours="<?php echo htmlspecialchars($template['target_hours'] ?? 0); ?>"
+											data-days="<?php echo htmlspecialchars($template['duration_days'] ?? 0); ?>"
+											data-entries="<?php echo htmlspecialchars($template['target_entries'] ?? ''); ?>"
+											data-points="<?php echo htmlspecialchars($template['target_points'] ?? ''); ?>"
+											data-desc="<?php echo htmlspecialchars($template['description'] ?? ''); ?>">
+										<?php 
+											$templateName = htmlspecialchars($template['name'] ?? 'Untitled Template');
+											$hours = $template['target_hours'] ?? 0;
+											$days = $template['duration_days'] ?? 0;
+											echo "{$templateName} ({$hours} hours in {$days} days)";
+										?>
+									</option>
+								<?php endforeach; ?>
+							</select>
+							<small>Select a pre-defined goal template</small>
+						</div>
 					</div>
-                    
-                    <div class="form-group">
-                        <label for="deadline">Deadline: *</label>
-                        <input type="date" id="deadline" name="deadline" required
-                               min="<?php echo date('Y-m-d'); ?>"
-                               max="<?php echo date('Y-m-d', strtotime('+5 years')); ?>"
-                               value="<?php echo isset($_POST['deadline']) ? htmlspecialchars($_POST['deadline']) : ''; ?>">
-                        <small>Must be in the future</small>
-                    </div>
-                </div>
-                
-                <div class="form-actions">
-                    <button type="submit" name="create_personal_goal" class="btn">
-                        🎯 Create Personal Goal
-                    </button>
-                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('goalFormContainer').style.display='none'; document.getElementById('toggleText').textContent='Show Form';">
-                        Cancel
-                    </button>
-                </div>
-            </form>
+
+					<div id="templateInfo" class="template-info-card" style="display: none;">
+						<div class="template-info-header">
+							<h4>Template Details</h4>
+						</div>
+						<div class="template-info-grid">
+							<div class="template-info-item">
+								<span class="template-label">Target Hours:</span>
+								<span id="tempHours" class="template-value"></span>
+							</div>
+							<div class="template-info-item">
+								<span class="template-label">Duration:</span>
+								<span id="tempDays" class="template-value"></span> days
+							</div>
+							<div class="template-info-item">
+								<span class="template-label">Target Entries:</span>
+								<span id="tempEntries" class="template-value"></span>
+							</div>
+							<div class="template-info-item">
+								<span class="template-label">Target Points:</span>
+								<span id="tempPoints" class="template-value"></span>
+							</div>
+							<div class="template-info-item full-width">
+								<span class="template-label">Description:</span>
+								<span id="tempDesc" class="template-desc"></span>
+							</div>
+							<div class="template-info-item full-width">
+								<span class="template-label">Deadline:</span>
+								<span id="tempDeadline" class="template-value highlight"></span>
+							</div>
+						</div>
+					</div>
+
+					<div class="form-actions">
+						<button type="submit" name="create_from_template" class="btn" id="createTemplateBtn" disabled>
+							🎯 Create Goal from Template
+						</button>
+						<button type="button" class="btn btn-secondary" onclick="hideGoalForm()">
+							Cancel
+						</button>
+					</div>
+				</form>
+			</div>
         </div>
     </div>
 
@@ -386,15 +509,14 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
                             <div class="progress-bar-fill personal" style="width: <?php echo min($progress, 100); ?>%"></div>
                         </div>
                         <div class="progress-stats">
-							<span><?php echo $goal['current_hours'] ?? 0; ?> / <?php echo $goal['target_hours']; ?> hours</span>
-							<?php if ($goal['target_entries']): ?>
-								<span><?php echo $goal['current_entries'] ?? 0; ?> / <?php echo $goal['target_entries']; ?> entries</span>
-							<?php endif; ?>
-							<!-- Display points if target is set -->
-							<?php if ($goal['target_points'] !== null && $goal['target_points'] > 0): ?>
-								<span><?php echo $goal['current_points'] ?? 0; ?> / <?php echo $goal['target_points']; ?> pts</span>
-							<?php endif; ?>
-						</div>
+                            <span><?php echo $goal['current_hours'] ?? 0; ?> / <?php echo $goal['target_hours']; ?> hours</span>
+                            <?php if ($goal['target_entries']): ?>
+                                <span><?php echo $goal['current_entries'] ?? 0; ?> / <?php echo $goal['target_entries']; ?> entries</span>
+                            <?php endif; ?>
+                            <?php if ($goal['target_points'] !== null && $goal['target_points'] > 0): ?>
+                                <span><?php echo $goal['current_points'] ?? 0; ?> / <?php echo $goal['target_points']; ?> pts</span>
+                            <?php endif; ?>
+                        </div>
                     </div>
 
                     <div class="goal-footer">
@@ -420,16 +542,16 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
                         
                         <div class="goal-actions">
                             <button type="button" class="btn btn-small" 
-									data-goal-id="<?php echo htmlspecialchars($goal['id']); ?>"
-									data-goal-title="<?php echo htmlspecialchars($goal['title']); ?>"
-									data-goal-description="<?php echo htmlspecialchars($goal['description'] ?? ''); ?>"
-									data-goal-hours="<?php echo htmlspecialchars($goal['target_hours']); ?>"
-									data-goal-entries="<?php echo htmlspecialchars($goal['target_entries'] ?? ''); ?>"
-									data-goal-points="<?php echo htmlspecialchars($goal['target_points'] ?? ''); ?>"
-									data-goal-deadline="<?php echo htmlspecialchars($goal['deadline']); ?>"
-									onclick="openEditGoalModalFromData(this); return false;">
-								✏️ Edit
-							</button>
+                                    data-goal-id="<?php echo htmlspecialchars($goal['id']); ?>"
+                                    data-goal-title="<?php echo htmlspecialchars($goal['title']); ?>"
+                                    data-goal-description="<?php echo htmlspecialchars($goal['description'] ?? ''); ?>"
+                                    data-goal-hours="<?php echo htmlspecialchars($goal['target_hours']); ?>"
+                                    data-goal-entries="<?php echo htmlspecialchars($goal['target_entries'] ?? ''); ?>"
+                                    data-goal-points="<?php echo htmlspecialchars($goal['target_points'] ?? ''); ?>"
+                                    data-goal-deadline="<?php echo htmlspecialchars($goal['deadline']); ?>"
+                                    onclick="openEditGoalModalFromData(this); return false;">
+                                ✏️ Edit
+                            </button>
                             <button type="button" class="btn btn-small btn-danger" onclick="confirmDeleteGoal(<?php echo $goal['id']; ?>)">
                                 🗑️ Delete
                             </button>
@@ -748,13 +870,13 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
                     <input type="number" id="edit_target_entries" name="target_entries" 
                            min="1" max="100">
                 </div>
-				
-				<div class="form-group">
-					<label for="edit_target_points">Target Points (optional):</label>
-					<input type="number" id="edit_target_points" name="target_points" 
-						   min="0" max="9999.99" step="0.01" placeholder="e.g., 25.5">
-					<small>Optional CPD points target</small>
-				</div>
+                
+                <div class="form-group">
+                    <label for="edit_target_points">Target Points (optional):</label>
+                    <input type="number" id="edit_target_points" name="target_points" 
+                           min="0" max="9999.99" step="0.01" placeholder="e.g., 25.5">
+                    <small>Optional CPD points target</small>
+                </div>
                 
                 <div class="form-group">
                     <label for="edit_deadline">Deadline: *</label>
@@ -767,8 +889,8 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
                     💾 Update Goal
                 </button>
                 <button type="button" class="btn btn-secondary" onclick="closeEditGoalModal()">
-					Cancel
-				</button>
+                    Cancel
+                </button>
             </div>
         </form>
     </div>
@@ -834,6 +956,39 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
         margin-top: 1.5rem;
     }
     
+    /* Goal Tabs */
+    .goal-tabs {
+        display: flex;
+        gap: 0;
+        margin-bottom: 1.5rem;
+        border-bottom: 2px solid #e1e5e9;
+    }
+    
+    .goal-tab-btn {
+        padding: 0.75rem 1.5rem;
+        background: none;
+        border: none;
+        border-bottom: 3px solid transparent;
+        cursor: pointer;
+        font-size: 1rem;
+        color: #666;
+        transition: all 0.3s ease;
+    }
+    
+    .goal-tab-btn.active {
+        color: #007cba;
+        border-bottom-color: #007cba;
+        font-weight: bold;
+    }
+    
+    .goal-tab-content {
+        display: none;
+    }
+    
+    .goal-tab-content.active {
+        display: block;
+    }
+    
     .goal-form {
         background: #f8f9fa;
         padding: 2rem;
@@ -847,8 +1002,8 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
         margin-bottom: 1.5rem;
     }
     
-    .form-row:has(.form-group:nth-child(3)) {
-        grid-template-columns: repeat(3, 1fr);
+    .form-row:has(.form-group:nth-child(4)) {
+        grid-template-columns: repeat(4, 1fr);
     }
     
     .form-group {
@@ -863,7 +1018,8 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
     }
     
     .form-group input,
-    .form-group textarea {
+    .form-group textarea,
+    .form-group select {
         padding: 0.75rem;
         border: 1px solid #ddd;
         border-radius: 4px;
@@ -882,6 +1038,69 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
         margin-top: 1.5rem;
     }
     
+    /* Template Info Card */
+    .template-info-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    .template-info-header {
+        margin-bottom: 1rem;
+    }
+    
+    .template-info-header h4 {
+        margin: 0;
+        color: white;
+        font-size: 1.1rem;
+    }
+    
+    .template-info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+    
+    .template-info-item {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .template-info-item.full-width {
+        grid-column: 1 / -1;
+    }
+    
+    .template-label {
+        font-size: 0.85rem;
+        opacity: 0.9;
+        margin-bottom: 0.25rem;
+    }
+    
+    .template-value {
+        font-weight: 600;
+        font-size: 1rem;
+    }
+    
+    .template-value.highlight {
+        font-size: 1.1rem;
+        background: rgba(255,255,255,0.2);
+        padding: 0.5rem;
+        border-radius: 4px;
+        margin-top: 0.25rem;
+    }
+    
+    .template-desc {
+        font-size: 0.95rem;
+        line-height: 1.5;
+        margin-top: 0.25rem;
+        padding: 0.75rem;
+        background: rgba(255,255,255,0.1);
+        border-radius: 4px;
+    }
+    
     .goals-section {
         margin-bottom: 3rem;
     }
@@ -889,6 +1108,9 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
     .goals-section h2 {
         margin-bottom: 1.5rem;
         color: #2c3e50;
+        font-size: 1.1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #f8f9fa;
     }
     
     .goals-grid {
@@ -1257,6 +1479,16 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
         color: #2c3e50;
     }
     
+    @media (max-width: 992px) {
+        .form-row:has(.form-group:nth-child(4)) {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        
+        .template-info-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+    
     @media (max-width: 768px) {
         .goals-grid {
             grid-template-columns: 1fr;
@@ -1266,7 +1498,8 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
             grid-template-columns: 1fr;
         }
         
-        .form-row:has(.form-group:nth-child(3)) {
+        .form-row:has(.form-group:nth-child(3)),
+        .form-row:has(.form-group:nth-child(4)) {
             grid-template-columns: 1fr;
         }
         
@@ -1274,43 +1507,107 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
             width: 100%;
             justify-content: flex-end;
         }
-    }
-	
-    .form-row:has(.form-group:nth-child(4)) {
-        grid-template-columns: repeat(4, 1fr);
-    }
-    
-    @media (max-width: 992px) {
-        .form-row:has(.form-group:nth-child(4)) {
-            grid-template-columns: repeat(2, 1fr);
+        
+        .goal-footer {
+            flex-direction: column;
+            align-items: stretch;
         }
-    }
-    
-    @media (max-width: 768px) {
-        .form-row:has(.form-group:nth-child(3)),
-        .form-row:has(.form-group:nth-child(4)) {
-            grid-template-columns: 1fr;
+        
+        .goal-footer-left {
+            margin-bottom: 1rem;
         }
     }
 </style>
 
 <script>
-// Goal modal functions - renamed to avoid conflicts with CPD entry modal
-function openEditGoalModal(goal) {
-    console.log('openEditGoalModal called with:', goal);
+// Goal tab functions
+function showGoalTab(tabName) {
+    // Hide all tab contents
+    document.querySelectorAll('.goal-tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
     
+    // Remove active class from all tab buttons
+    document.querySelectorAll('.goal-tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Show selected tab content
+    document.getElementById(tabName + '-goal-tab').classList.add('active');
+    
+    // Add active class to clicked button
+    event.target.classList.add('active');
+    
+    // If switching to template tab and a template is selected, show its info
+    if (tabName === 'template') {
+        const templateSelect = document.getElementById('template_id');
+        if (templateSelect.value) {
+            showTemplateInfo(templateSelect);
+        }
+    }
+}
+
+// Show template information when selected
+function showTemplateInfo(select) {
+    const option = select.options[select.selectedIndex];
+    const templateInfo = document.getElementById('templateInfo');
+    const createBtn = document.getElementById('createTemplateBtn');
+    
+    if (option.value) {
+        templateInfo.style.display = 'block';
+        createBtn.disabled = false;
+        
+        // Set template values with null checks
+        document.getElementById('tempHours').textContent = option.dataset.hours || '0';
+        document.getElementById('tempDays').textContent = option.dataset.days || '0';
+        document.getElementById('tempEntries').textContent = option.dataset.entries || 'Not set';
+        document.getElementById('tempPoints').textContent = option.dataset.points || 'Not set';
+        
+        // Handle description - ensure it's properly escaped
+        const description = option.dataset.desc || 'No description available';
+        document.getElementById('tempDesc').textContent = description;
+        
+        // Calculate and display deadline
+        const days = parseInt(option.dataset.days) || 0;
+        const deadline = new Date();
+        deadline.setDate(deadline.getDate() + days);
+        const formattedDeadline = deadline.toLocaleDateString('en-US', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+        document.getElementById('tempDeadline').textContent = formattedDeadline;
+    } else {
+        templateInfo.style.display = 'none';
+        createBtn.disabled = true;
+    }
+}
+
+// Hide goal form
+function hideGoalForm() {
+    const container = document.getElementById('goalFormContainer');
+    const toggleText = document.getElementById('toggleText');
+    
+    if (container && toggleText) {
+        container.style.display = 'none';
+        toggleText.textContent = 'Show Form';
+    }
+}
+
+// Goal modal functions
+function openEditGoalModal(goal) {
     try {
         document.getElementById('edit_goal_id').value = goal.id;
         document.getElementById('edit_goal_title').value = goal.title;
         document.getElementById('edit_goal_description').value = goal.description || '';
         document.getElementById('edit_target_hours').value = goal.target_hours;
         document.getElementById('edit_target_entries').value = goal.target_entries || '';
-		document.getElementById('edit_target_points').value = goal.target_points || '';
+        document.getElementById('edit_target_points').value = goal.target_points || '';
         document.getElementById('edit_deadline').value = goal.deadline;
         
         document.getElementById('editGoalModal').style.display = 'block';
         document.body.style.overflow = 'hidden';
-        console.log('Goal modal opened successfully');
     } catch (error) {
         console.error('Error opening goal modal:', error);
     }
@@ -1323,11 +1620,10 @@ function openEditGoalModalFromData(button) {
         description: button.getAttribute('data-goal-description'),
         target_hours: button.getAttribute('data-goal-hours'),
         target_entries: button.getAttribute('data-goal-entries'),
-		target_points: button.getAttribute('data-goal-points'),
+        target_points: button.getAttribute('data-goal-points'),
         deadline: button.getAttribute('data-goal-deadline')
     };
     
-    console.log('Goal data from button:', goal);
     openEditGoalModal(goal);
 }
 
@@ -1372,6 +1668,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (container.style.display === 'none' || container.style.display === '') {
                     container.style.display = 'block';
                     toggleText.textContent = 'Hide Form';
+                    
+                    // Show custom tab by default
+                    showGoalTab('custom');
                 } else {
                     container.style.display = 'none';
                     toggleText.textContent = 'Show Form';
@@ -1381,14 +1680,22 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// If there are errors, show the form
+// If there are errors, show the form and appropriate tab
 <?php if (!empty($error_messages)): ?>
 document.addEventListener('DOMContentLoaded', function() {
     const container = document.getElementById('goalFormContainer');
     const toggleText = document.getElementById('toggleText');
+    
     if (container && toggleText) {
         container.style.display = 'block';
         toggleText.textContent = 'Hide Form';
+        
+        // Show appropriate tab based on which form had errors
+        <?php if (isset($_POST['create_from_template'])): ?>
+            showGoalTab('template');
+        <?php else: ?>
+            showGoalTab('custom');
+        <?php endif; ?>
     }
 });
 <?php endif; ?>
