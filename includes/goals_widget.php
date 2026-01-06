@@ -6,8 +6,11 @@
 $user_active_goals = getUserGoals($pdo, $_SESSION['user_id'], 'active');
 $user_goal_stats = getGoalStatistics($pdo, $_SESSION['user_id']);
 
-// Only show widget if user has goals
-if (count($user_active_goals) > 0 || ($user_goal_stats['total_goals'] ?? 0) > 0):
+// Get templates for quick creation
+$templates = getGoalTemplates($pdo);
+
+// Only show widget if user has goals or templates exist
+if (count($user_active_goals) > 0 || ($user_goal_stats['total_goals'] ?? 0) > 0 || count($templates) > 0):
 ?>
 
 <div class="goals-widget">
@@ -15,6 +18,26 @@ if (count($user_active_goals) > 0 || ($user_goal_stats['total_goals'] ?? 0) > 0)
         <h2>🎯 My Goals</h2>
         <a href="user_goals.php" class="view-all-link">View All →</a>
     </div>
+
+    <!-- Quick Goal Creation from Template (if templates exist) -->
+    <?php if (count($templates) > 0): ?>
+    <div class="quick-create-section">
+        <h3>Quick Create from Template</h3>
+        <form method="POST" action="user_goals.php" class="quick-template-form">
+            <select name="template_id" onchange="this.form.submit()">
+                <option value="">Select a template...</option>
+                <?php foreach ($templates as $template): ?>
+                    <option value="<?php echo $template['id']; ?>">
+                        <?php echo htmlspecialchars($template['name']); ?> 
+                        (<?php echo $template['target_hours']; ?> hours)
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <input type="hidden" name="create_from_template" value="1">
+        </form>
+        <small>Creates a personal goal with predefined settings</small>
+    </div>
+    <?php endif; ?>
 
     <!-- Goals Summary -->
     <div class="goals-summary">
@@ -123,7 +146,10 @@ if (count($user_active_goals) > 0 || ($user_goal_stats['total_goals'] ?? 0) > 0)
     <?php else: ?>
     <div class="no-active-goals">
         <p>No active goals at the moment.</p>
-        <small>Your manager or partner will set goals to guide your professional development.</small>
+        <small>Create a goal from a template above, or create a custom one in the Goals page.</small>
+        <div style="margin-top: 1rem;">
+            <a href="user_goals.php" class="btn btn-small">Create Your First Goal</a>
+        </div>
     </div>
     <?php endif; ?>
 </div>
@@ -163,6 +189,43 @@ if (count($user_active_goals) > 0 || ($user_goal_stats['total_goals'] ?? 0) > 0)
         color: #005a87;
     }
     
+    /* Quick Create Section */
+    .quick-create-section {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+        border: 1px dashed #007cba;
+    }
+    
+    .quick-create-section h3 {
+        margin: 0 0 0.75rem 0;
+        color: #2c3e50;
+        font-size: 1rem;
+    }
+    
+    .quick-template-form select {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 0.95rem;
+        background: white;
+    }
+    
+    .quick-template-form select:focus {
+        outline: none;
+        border-color: #007cba;
+        box-shadow: 0 0 0 2px rgba(0,124,186,0.2);
+    }
+    
+    .quick-create-section small {
+        display: block;
+        margin-top: 0.5rem;
+        color: #666;
+        font-size: 0.85rem;
+    }
+    
     .goals-summary {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -170,6 +233,7 @@ if (count($user_active_goals) > 0 || ($user_goal_stats['total_goals'] ?? 0) > 0)
         margin-bottom: 1.5rem;
     }
     
+    /* Rest of the existing styles remain the same... */
     .summary-item {
         display: flex;
         align-items: center;
