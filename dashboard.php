@@ -257,6 +257,15 @@ try {
 // Get total hours
 $total_hours = getTotalCPDHours($pdo, $_SESSION['user_id']);
 debugLog("Total hours: $total_hours");
+
+// Get total points
+$total_points = 0;
+foreach ($entries as $entry) {
+    if (isset($entry['points']) && $entry['points'] !== null && $entry['points'] > 0) {
+        $total_points += floatval($entry['points']);
+    }
+}
+debugLog("Total points: $total_points");
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -491,6 +500,66 @@ debugLog("Total hours: $total_hours");
 			font-style: italic;
 			padding: 0.5rem;
 		}
+		
+		/* Export Section Styles */
+		.export-section {
+			background: #fff;
+			padding: 1.5rem;
+			border-radius: 8px;
+			box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+			margin-bottom: 2rem;
+			border-left: 4px solid #007cba;
+		}
+
+		.export-section h2 {
+			color: #007cba;
+			margin-top: 0;
+			margin-bottom: 1.5rem;
+		}
+
+		.export-section .form-group {
+			margin-bottom: 1rem;
+		}
+
+		.export-section label {
+			display: block;
+			margin-bottom: 0.5rem;
+			font-weight: 600;
+			color: #333;
+		}
+
+		.export-section input[type="date"],
+		.export-section select {
+			width: 100%;
+			padding: 0.75rem;
+			border: 1px solid #ddd;
+			border-radius: 4px;
+			font-size: 1rem;
+			transition: border-color 0.3s ease;
+		}
+
+		.export-section input[type="date"]:focus,
+		.export-section select:focus {
+			outline: none;
+			border-color: #007cba;
+			box-shadow: 0 0 0 2px rgba(0,124,186,0.2);
+		}
+
+		.export-section button[type="submit"] {
+			width: 100%;
+			transition: all 0.3s ease;
+		}
+
+		.export-section button[type="submit"]:hover {
+			transform: translateY(-2px);
+			box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+		}
+
+		@media (max-width: 768px) {
+			.export-section div[style*="grid-template-columns"] {
+				grid-template-columns: 1fr !important;
+			}
+		}
     </style>
 </head>
 <body>
@@ -667,8 +736,10 @@ debugLog("Total hours: $total_hours");
                         </tr>
                         <?php endforeach; ?>
                         <tr class="total-hours-row">
-                            <td colspan="5" style="text-align: right; font-weight: bold;">Total Hours:</td>
-                            <td style="font-weight: bold;"><?php echo htmlspecialchars($total_hours); ?> hours</td>
+                            <td colspan="4" style="text-align: right; font-weight: bold;">Total:</td>
+                            <td style="font-weight: bold;"><?php echo number_format($total_hours, 1); ?> hours</td>
+                            <td style="font-weight: bold;"><?php echo number_format($total_points, 2); ?> pts</td>
+                            <td></td>
                         </tr>
                     </tbody>
                 </table>
@@ -739,7 +810,7 @@ debugLog("Total hours: $total_hours");
 
         <div class="export-section">
             <h2>Export CPD Records</h2>
-            <form method="GET" action="export_csv.php" id="exportForm">
+            <form method="GET" id="exportForm">
                 <div class="form-group">
                     <label>Start Date:</label>
                     <input type="date" name="start_date" id="exportStartDate">
@@ -759,9 +830,14 @@ debugLog("Total hours: $total_hours");
                         <option value="Other">Other</option>
                     </select>
                 </div>
-                <button type="submit" class="btn btn-block" style="background: #28a745;">
-                    📥 Export CSV
-                </button>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <button type="submit" formaction="export_csv.php" class="btn" style="background: #28a745;">
+                        📊 Export CSV
+                    </button>
+                    <button type="submit" formaction="export_pdf.php" class="btn" style="background: #dc3545;">
+                        📄 Export PDF
+                    </button>
+                </div>
             </form>
         </div>
     </div>
