@@ -695,3 +695,64 @@ input[type="checkbox"] {
 .pending-review-row {
     background: #fffef5;
 }
+
+.export-section {
+    background: #fff;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    margin-bottom: 2rem;
+    border-left: 4px solid #007cba;
+}
+
+.export-section h2 {
+    color: #007cba;
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+}
+
+.export-section .form-group {
+    margin-bottom: 1rem;
+}
+
+.export-section label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #333;
+}
+
+.export-section input[type="date"],
+.export-section select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+    transition: border-color 0.3s ease;
+}
+
+.export-section input[type="date"]:focus,
+.export-section select:focus {
+    outline: none;
+    border-color: #007cba;
+    box-shadow: 0 0 0 2px rgba(0,124,186,0.2);
+}
+
+/* Export button grid */
+.export-section button[type="submit"] {
+    width: 100%;
+    transition: all 0.3s ease;
+}
+
+.export-section button[type="submit"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .export-section div[style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+    }
+}
