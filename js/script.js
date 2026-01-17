@@ -49,37 +49,6 @@ function initializeModal() {
     }
 }
 
-// Open edit modal and populate with entry data
-async function openEditModal(row) {
-    const entryId = row.dataset.entryId;
-    const titleElement = row.querySelector('td:nth-child(3) div');
-    const title = titleElement ? titleElement.textContent.split('\n')[0].trim() : '';
-    const description = row.dataset.description || '';
-    const dateElement = row.querySelector('td:nth-child(2)');
-    const date = dateElement ? dateElement.textContent.trim() : '';
-    const categoryElement = row.querySelector('td:nth-child(4)');
-    const category = categoryElement ? categoryElement.textContent.trim() : '';
-    const hoursElement = row.querySelector('td:nth-child(5)');
-    const hoursText = hoursElement ? hoursElement.textContent.trim() : '0';
-    const hours = parseFloat(hoursText);
-    
-    console.log('Opening edit modal for entry:', entryId);
-    
-    // Populate form fields
-    document.getElementById('edit_entry_id').value = entryId;
-    document.getElementById('edit_title').value = title;
-    document.getElementById('edit_description').value = description;
-    document.getElementById('edit_date_completed').value = date;
-    document.getElementById('edit_hours').value = hours;
-    document.getElementById('edit_category').value = category;
-    
-    // Load existing documents
-    await loadExistingDocuments(entryId);
-    
-    // Show modal
-    document.getElementById('editModal').style.display = 'block';
-}
-
 // Load existing documents for an entry
 async function loadExistingDocuments(entryId) {
     const container = document.getElementById('existingDocuments');
