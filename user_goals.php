@@ -922,6 +922,69 @@ $manager_set_goals = array_filter($individual_goals, function($g) {
 </div>
 
 <style>
+	/* Stats Grid - Add this to the <style> section in user_goals.php */
+	.stats-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+		gap: 1.5rem;
+		margin-bottom: 2rem;
+	}
+
+	.stat-card {
+		background: #fff;
+		padding: 1.5rem;
+		border-radius: 12px;
+		box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+		text-align: center;
+		border: 2px solid #e1e5e9;
+		transition: all 0.3s ease;
+	}
+
+	.stat-card:hover {
+		transform: translateY(-3px);
+		box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+	}
+
+	.stat-card h3 {
+		margin: 0 0 0.75rem 0;
+		color: #2c3e50;
+		font-size: 0.95rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	.stat-number {
+		font-size: 2.5rem;
+		font-weight: bold;
+		color: #667eea;
+		margin: 0.5rem 0;
+		line-height: 1;
+	}
+
+	.stat-card small {
+		color: #666;
+		font-size: 0.85rem;
+	}
+
+	/* Responsive stats grid */
+	@media (max-width: 768px) {
+		.stats-grid {
+			grid-template-columns: repeat(2, 1fr);
+			gap: 1rem;
+		}
+		
+		.stat-number {
+			font-size: 2rem;
+		}
+	}
+
+	@media (max-width: 480px) {
+		.stats-grid {
+			grid-template-columns: 1fr;
+		}
+	}
+
     .page-header {
         margin-bottom: 2rem;
     }
